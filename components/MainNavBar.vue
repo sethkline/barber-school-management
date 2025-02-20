@@ -1,4 +1,3 @@
-<!-- components/Navbar.vue -->
 <template>
   <nav class="bg-white border-b border-gray-200">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -11,27 +10,13 @@
           <!-- Desktop Navigation -->
           <div class="hidden sm:ml-6 sm:flex sm:space-x-8">
             <NuxtLink
-              to="/dashboard"
+              v-for="item in navigationItems"
+              :key="item.path"
+              :to="item.path"
               class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-              :class="{ 'border-primary-500 text-primary-600': route.path === '/dashboard' }"
+              :class="{ 'border-primary-500 text-primary-600': route.path.startsWith(item.path) }"
             >
-              Dashboard
-            </NuxtLink>
-            
-            <NuxtLink
-              to="/students"
-              class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-              :class="{ 'border-primary-500 text-primary-600': route.path.startsWith('/students') }"
-            >
-              Students
-            </NuxtLink>
-            
-            <NuxtLink
-              to="/leads"
-              class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-              :class="{ 'border-primary-500 text-primary-600': route.path.startsWith('/leads') }"
-            >
-              Leads
+              {{ item.label }}
             </NuxtLink>
           </div>
         </div>
@@ -43,7 +28,7 @@
             <Button
               icon="pi pi-user"
               aria-label="User Menu"
-              label="User"
+              :label="userStore.fullName"
               @click="toggleUserMenu"
               severity="secondary"
               text
@@ -94,17 +79,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
+import { useUserStore } from '~/stores/user'
 import TieredMenu from 'primevue/tieredmenu'
 import Button from 'primevue/button'
 import Sidebar from 'primevue/sidebar'
 
-
 const route = useRoute()
 const router = useRouter()
 const toast = useToast()
+const userStore = useUserStore()
 const mobileMenuOpen = ref(false)
 const userMenu = ref()
 
@@ -114,12 +100,20 @@ const navigationItems = [
   { label: 'Leads', path: '/leads' }
 ]
 
+onMounted(async () => {
+  // Fetch user data if not already loaded
+  if (!userStore.isAuthenticated) {
+    await userStore.fetchCurrentUser()
+  }
+})
+
 const handleLogout = async () => {
   try {
     await $fetch('/api/auth/logout', {
       method: 'POST'
     })
     
+    userStore.clearUser()
     router.push('/login')
     
     toast.add({
@@ -144,6 +138,14 @@ const toggleUserMenu = (event: Event) => {
 }
 
 const menuItems = [
+  {
+    label: 'Profile',
+    icon: 'pi pi-user',
+    command: () => router.push('/profile')
+  },
+  {
+    separator: true
+  },
   {
     label: 'Sign out',
     icon: 'pi pi-sign-out',

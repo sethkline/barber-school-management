@@ -7,6 +7,7 @@ export default defineNuxtConfig({
     '@nuxtjs/supabase',
     '@nuxtjs/storybook',
     '@nuxt/test-utils/module',
+    '@pinia/nuxt'
   ],
   primevue: {
     options: { theme: 'none' },
