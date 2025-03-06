@@ -7,12 +7,13 @@ export default defineNuxtConfig({
     '@nuxtjs/supabase',
     '@nuxtjs/storybook',
     '@nuxt/test-utils/module',
-    '@pinia/nuxt'
+    '@pinia/nuxt',
+    '@vee-validate/nuxt'
   ],
   primevue: {
     options: { theme: 'none' },
 },
-  css: ['@/assets/styles/tailwind.css', '@/assets/styles/base.css'],
+  css: ['@/assets/styles/tailwind.css', '@/assets/styles/base.css', 'primeicons/primeicons.css'],
   postcss: {
     plugins: {
         'postcss-import': {},

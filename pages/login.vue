@@ -5,8 +5,13 @@
     <div class="w-full max-w-4xl mx-auto px-4 py-8 flex flex-col lg:flex-row gap-8 relative z-10">
       <div class="hidden lg:flex flex-col flex-1 justify-center">
         <div>
+          <img
+            src="~/assets/barber-styling-institute-logo.png"
+            alt="Barber School Management System Logo"
+            class="mb-4 w-64 h-auto"
+          />
           <h1 class="text-4xl font-bold mb-4 text-surface-900 dark:text-surface-50">
-            Classic Cuts
+            Barber School Management System
           </h1>
           <p class="text-surface-600 dark:text-surface-400 text-xl leading-relaxed">
             Where tradition meets style. Managing your barbershop has never been easier.

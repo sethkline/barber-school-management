@@ -1,23 +1,5 @@
 <template>
-  <div class="students-page">
-    <h1>Students</h1>
-
-    <!-- PrimeVue DataTable with pagination -->
-    <DataTable
-      :value="students"
-      :paginator="true"
-      :rows="limit"
-      :totalRecords="totalRecords"
-      @page="onPageChange"
-      responsiveLayout="scroll"
-    >
-      <Column field="first_name" header="First Name" sortable></Column>
-      <Column field="last_name" header="Last Name" sortable></Column>
-      <Column field="email" header="Email"></Column>
-      <Column field="phone" header="Phone"></Column>
-      <!-- Add more columns as needed -->
-    </DataTable>
-  </div>
+   <StudentsPage />
 </template>
 
 <script setup lang="ts">
@@ -59,8 +41,4 @@ const onPageChange = (event: { page: number; rows: number }) => {
 }
 </script>
 
-<style scoped>
-.students-page {
-  padding: 2rem;
-}
-</style>
+
