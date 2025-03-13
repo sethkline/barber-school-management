@@ -10,28 +10,22 @@
         </NuxtLink>
       </div>
     </div>
-    
+
     <div v-if="loading" class="flex justify-center items-center p-6">
-      <ProgressSpinner style="width:50px;height:50px" strokeWidth="4" />
+      <ProgressSpinner style="width: 50px; height: 50px" strokeWidth="4" />
     </div>
-    
+
     <div v-else-if="error" class="p-6 text-center text-red-600">
       <i class="pi pi-exclamation-circle text-3xl mb-2"></i>
       <p>{{ error }}</p>
-      <Button 
-        label="Try Again" 
-        icon="pi pi-refresh" 
-        class="mt-2" 
-        severity="secondary"
-        @click="loadTasks"
-      />
+      <Button label="Try Again" icon="pi pi-refresh" class="mt-2" severity="secondary" @click="loadTasks" />
     </div>
-    
+
     <div v-else-if="!tasks.length" class="p-6 text-center text-gray-500">
       <i class="pi pi-check-circle text-3xl mb-2 text-gray-400"></i>
       <p>No upcoming tasks</p>
     </div>
-    
+
     <div v-else class="divide-y divide-gray-200">
       <div v-for="task in tasks" :key="task.id" class="p-4 hover:bg-gray-50">
         <div class="flex items-start">
@@ -56,11 +50,11 @@
                 </span>
               </div>
               <div>
-                <Button 
+                <Button
                   v-if="task.status !== 'completed'"
-                  icon="pi pi-check" 
-                  rounded 
-                  text 
+                  icon="pi pi-check"
+                  rounded
+                  text
                   severity="success"
                   aria-label="Mark Complete"
                   class="p-1"
@@ -110,7 +104,7 @@ onMounted(() => {
 async function loadTasks() {
   loading.value = true;
   error.value = null;
-  
+
   try {
     const response = await $fetch('/api/tasks/upcoming', {
       params: {
@@ -128,14 +122,14 @@ async function loadTasks() {
 
 function formatDueDate(dateString: string | null): string {
   if (!dateString) return 'No due date';
-  
+
   const dueDate = new Date(dateString);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  
+
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
-  
+
   if (dueDate.getTime() === today.getTime()) {
     return 'Today';
   } else if (dueDate.getTime() === tomorrow.getTime()) {
@@ -144,8 +138,8 @@ function formatDueDate(dateString: string | null): string {
     const days = Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
     return `${days} day${days > 1 ? 's' : ''} overdue`;
   } else {
-    return new Intl.DateTimeFormat('en-US', { 
-      month: 'short', 
+    return new Intl.DateTimeFormat('en-US', {
+      month: 'short',
       day: 'numeric',
       year: dueDate.getFullYear() !== today.getFullYear() ? 'numeric' : undefined
     }).format(dueDate);
@@ -159,7 +153,7 @@ function formatStatus(status: string | null): string {
 
 function statusClass(status: string | null): string {
   if (!status) return 'text-yellow-600';
-  
+
   switch (status.toLowerCase()) {
     case 'pending':
       return 'text-yellow-600';
@@ -176,7 +170,7 @@ function statusClass(status: string | null): string {
 
 function priorityClass(priority: string | undefined): string {
   if (!priority) return 'bg-gray-100 text-gray-600';
-  
+
   switch (priority.toLowerCase()) {
     case 'high':
       return 'bg-red-100 text-red-600';
@@ -191,7 +185,7 @@ function priorityClass(priority: string | undefined): string {
 
 function priorityIcon(priority: string | undefined): string {
   if (!priority) return 'pi pi-flag';
-  
+
   switch (priority.toLowerCase()) {
     case 'high':
       return 'pi pi-flag-fill';
@@ -206,16 +200,20 @@ function priorityIcon(priority: string | undefined): string {
 
 async function markComplete(taskId: string) {
   try {
-    await $fetch(`/api/tasks/${taskId}/complete`, {
-      method: 'POST'
+    // Use the PUT endpoint instead and send the updated status
+    await $fetch(`/api/tasks/${taskId}`, {
+      method: 'PUT',
+      body: {
+        status: 'completed'
+      }
     });
-    
+
     // Update local task status
-    const taskIndex = tasks.value.findIndex(t => t.id === taskId);
+    const taskIndex = tasks.value.findIndex((t) => t.id === taskId);
     if (taskIndex !== -1) {
       tasks.value[taskIndex].status = 'completed';
     }
-    
+
     toast.add({
       severity: 'success',
       summary: 'Task Completed',
