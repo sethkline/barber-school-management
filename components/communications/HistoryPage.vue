@@ -5,7 +5,7 @@
     <div class="bg-white shadow rounded-lg overflow-hidden">
       <div class="p-4 border-b border-gray-200 flex flex-wrap gap-4 items-center">
         <div class="flex-1">
-          <span class="p-input-icon-left w-full">
+          <span class="p-input-icon-left w-full flex space-x-2 items-center">
             <i class="pi pi-search" />
             <InputText v-model="searchQuery" placeholder="Search in subject or content..." class="w-full" />
           </span>
@@ -304,7 +304,8 @@ async function fetchCommunications(page) {
       params.append('recipientType', recipientTypes.value[0]);
     }
     
-    const response = await $fetch(`/api/communications/history?${params.toString()}`);
+    // Use the new endpoint
+    const response = await $fetch(`/api/communications/history/all?${params.toString()}`);
     
     communications.value = response.data;
     totalRecords.value = response.count;

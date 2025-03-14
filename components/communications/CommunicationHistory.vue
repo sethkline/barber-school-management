@@ -135,7 +135,7 @@ async function fetchCommunications(append = false) {
     
     error.value = null
     
-    const response = await $fetch(`/api/communications/history?${queryString}`)
+    const response = await $fetch(`/api/communications/history/all?${queryString}`)
     
     if (append) {
       communications.value = [...communications.value, ...response.data]
