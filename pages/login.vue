@@ -14,7 +14,7 @@
             Barber School Management System
           </h1>
           <p class="text-surface-600 dark:text-surface-400 text-xl leading-relaxed">
-            Where tradition meets style. Managing your barbershop has never been easier.
+            From Student Enrollment to Lead Tracking, All in One Place.
           </p>
         </div>
       </div>

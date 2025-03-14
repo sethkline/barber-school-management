@@ -19,6 +19,7 @@
     "@primevue/forms": "^4.2.5",
     "@vee-validate/nuxt": "^4.15.0",
     "chart.js": "^4.4.8",
+    "mailgun-js": "^0.22.0",
     "nuxt": "^3.15.4",
     "nuxt-security": "^2.1.5",
     "pinia": "^3.0.1",

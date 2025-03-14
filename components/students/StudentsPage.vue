@@ -69,7 +69,7 @@ import { ref, onMounted } from 'vue';
 import { useToast } from 'primevue/usetoast';
 import StudentList from '~/components/students/StudentList.vue';
 import StudentForm from '~/components/students/StudentForm.vue';
-import StudentDetail from '~/components/students/StudentDetail.vue';
+import StudentDetail from '~/components/students/StudentDetailModal.vue';
 import StudentDeleteConfirmation from '~/components/students/StudentDeleteConfirmation.vue';
 import DocumentUpload from '~/components/students/DocumentUpload.vue';
 import type { Tables, TablesInsert, TablesUpdate } from '~/types/supabase';

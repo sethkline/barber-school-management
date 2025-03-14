@@ -1,12 +1,18 @@
-<!-- components/students/StudentList.vue -->
 <template>
   <div class="bg-white rounded-lg shadow">
     <div class="flex items-center justify-between p-4 border-b border-gray-200">
       <h2 class="text-lg font-medium text-gray-900">Student List</h2>
-      <div class="flex items-center">
-        <span class="text-sm text-gray-500 mr-4">
+      <div class="flex items-center space-x-2">
+        <span class="text-sm text-gray-500 mr-2">
           {{ totalRecords }} total students
         </span>
+        <Button
+          v-if="selectedStudents.length > 0"
+          icon="pi pi-envelope"
+          label="Email Selected"
+          severity="secondary"
+          @click="openBulkEmailModal"
+        />
         <Button
           icon="pi pi-plus"
           label="Add Student"
@@ -46,6 +52,8 @@
         class="p-datatable-sm"
         @page="onPageChange"
         v-model:filters="filters"
+        v-model:selection="selectedStudents"
+        dataKey="id"
         filterDisplay="menu"
         :globalFilterFields="['first_name', 'last_name', 'email', 'status']"
       >
@@ -68,6 +76,8 @@
             </div>
           </div>
         </template>
+
+        <Column selectionMode="multiple" headerStyle="width: 3rem"></Column>
 
         <Column field="first_name" header="First Name" sortable>
           <template #filter="{ filterModel, filterCallback }">
@@ -137,7 +147,7 @@
           </template>
         </Column>
         
-        <Column header="Actions" :exportable="false" style="min-width:8rem">
+        <Column header="Actions" :exportable="false" style="min-width:12rem">
           <template #body="{ data }">
             <div class="flex gap-2">
               <Button
@@ -157,6 +167,14 @@
                 aria-label="Edit"
               />
               <Button
+                icon="pi pi-envelope"
+                rounded
+                text
+                severity="secondary"
+                @click="openSendEmailModal(data)"
+                aria-label="Email"
+              />
+              <Button
                 icon="pi pi-trash"
                 rounded
                 text
@@ -169,11 +187,44 @@
         </Column>
       </DataTable>
     </div>
+    
+    <!-- Send Email Modal for Single Student -->
+    <Dialog 
+      v-model:visible="showSendEmailModal" 
+      header="Send Email" 
+      :modal="true"
+      :closable="true"
+      :style="{ width: '500px' }"
+    >
+      <CommunicationsSendEmailForm 
+        :recipient-email="selectedStudent?.email || ''"
+        recipient-type="student"
+        :recipient-id="selectedStudent?.id || ''"
+        :variables="selectedStudentVariables"
+        @sent="onEmailSent"
+      />
+    </Dialog>
+    
+    <!-- Bulk Email Modal -->
+    <Dialog 
+      v-model:visible="showBulkEmailModal" 
+      header="Send Bulk Email" 
+      :modal="true"
+      :closable="true"
+      :style="{ width: '700px' }"
+    >
+      <CommunicationsBulkEmailForm
+        :recipients="formattedSelectedStudents"
+        recipient-type="student"
+        @sent="onBulkEmailSent"
+        @cancel="showBulkEmailModal = false"
+      />
+    </Dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import DataTable from 'primevue/datatable';
 import Column from 'primevue/column';
 import Button from 'primevue/button';
@@ -182,6 +233,8 @@ import InputText from 'primevue/inputtext';
 import Tag from 'primevue/tag';
 import Dropdown from 'primevue/dropdown';
 import Calendar from 'primevue/calendar';
+import Dialog from 'primevue/dialog';
+import { useToast } from 'primevue/usetoast';
 
 // Props
 const props = defineProps({
@@ -214,8 +267,12 @@ const emit = defineEmits([
   'add-student',
   'edit-student',
   'view-student',
-  'delete-student'
+  'delete-student',
+  'refresh-communications'
 ]);
+
+// Composables
+const toast = useToast();
 
 // State
 const filters = ref({
@@ -234,6 +291,43 @@ const statusOptions = [
   { label: 'Withdrawn', value: 'withdrawn' },
   { label: 'Pending', value: 'pending' }
 ];
+
+const selectedStudents = ref([]);
+const selectedStudent = ref(null);
+const showSendEmailModal = ref(false);
+const showBulkEmailModal = ref(false);
+
+// Computed
+const selectedStudentVariables = computed(() => {
+  if (!selectedStudent.value) return {};
+  
+  return {
+    firstName: selectedStudent.value.first_name,
+    lastName: selectedStudent.value.last_name,
+    fullName: `${selectedStudent.value.first_name} ${selectedStudent.value.last_name}`,
+    email: selectedStudent.value.email,
+    phone: selectedStudent.value.phone || '',
+    enrollmentDate: selectedStudent.value.enrollment_date || '',
+    status: selectedStudent.value.status || ''
+  };
+});
+
+const formattedSelectedStudents = computed(() => {
+  return selectedStudents.value.map(student => ({
+    id: student.id,
+    name: `${student.first_name} ${student.last_name}`,
+    email: student.email,
+    variables: {
+      firstName: student.first_name,
+      lastName: student.last_name,
+      fullName: `${student.first_name} ${student.last_name}`,
+      email: student.email,
+      phone: student.phone || '',
+      enrollmentDate: student.enrollment_date || '',
+      status: student.status || ''
+    }
+  }));
+});
 
 // Methods
 const onPageChange = (event) => {
@@ -282,5 +376,47 @@ const toggleFilterDisplay = () => {
   if (datatable) {
     datatable.classList.toggle('p-datatable-filter-display-row');
   }
+};
+
+const openSendEmailModal = (student) => {
+  selectedStudent.value = student;
+  showSendEmailModal.value = true;
+};
+
+const openBulkEmailModal = () => {
+  if (selectedStudents.value.length === 0) {
+    toast.add({
+      severity: 'warn',
+      summary: 'No Students Selected',
+      detail: 'Please select at least one student to email.',
+      life: 3000
+    });
+    return;
+  }
+  
+  showBulkEmailModal.value = true;
+};
+
+const onEmailSent = () => {
+  showSendEmailModal.value = false;
+  toast.add({
+    severity: 'success',
+    summary: 'Email Sent',
+    detail: 'Email has been sent successfully.',
+    life: 3000
+  });
+  emit('refresh-communications');
+};
+
+const onBulkEmailSent = () => {
+  showBulkEmailModal.value = false;
+  selectedStudents.value = [];
+  toast.add({
+    severity: 'success',
+    summary: 'Bulk Email Sent',
+    detail: `Emails have been sent to ${formattedSelectedStudents.value.length} students.`,
+    life: 3000
+  });
+  emit('refresh-communications');
 };
 </script>

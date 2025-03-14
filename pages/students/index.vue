@@ -2,7 +2,7 @@
    <StudentsPage />
 </template>
 
-<script setup lang="ts">
+<!-- <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 
 // Local state for pagination and student data.
@@ -39,6 +39,6 @@ const onPageChange = (event: { page: number; rows: number }) => {
   limit.value = event.rows
   loadStudents()
 }
-</script>
+</script> -->
 
 
