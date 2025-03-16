@@ -84,168 +84,172 @@
         
         <!-- Right column with tabs -->
         <div class="col-span-2">
-          <TabView>
-            <!-- Attendance Tab -->
-            <TabPanel header="Attendance">
-              <div v-if="attendanceLoading" class="p-4 flex justify-center">
-                <ProgressSpinner style="width:30px;height:30px" strokeWidth="4" />
-              </div>
-              <div v-else>
-                <div class="flex justify-between items-center mb-4">
-                  <h3 class="text-lg font-medium">Attendance Record</h3>
-                  <Dropdown 
-                    v-model="attendancePeriod" 
-                    :options="attendancePeriodOptions" 
-                    optionLabel="label"
-                    optionValue="value"
-                    class="w-40"
-                    @change="loadAttendance"
-                  />
-                </div>
-                <div v-if="attendance.length === 0" class="p-4 text-center text-gray-500">
-                  <p>No attendance records found</p>
+          <Tabs v-model:value="activeTab">
+            <TabList>
+              <Tab value="attendance">Attendance</Tab>
+              <Tab value="assessments">Assessments</Tab>
+              <Tab value="communications">Communications</Tab>
+            </TabList>
+            <TabPanels>
+              <!-- Attendance Tab -->
+              <TabPanel value="attendance">
+                <div v-if="attendanceLoading" class="p-4 flex justify-center">
+                  <ProgressSpinner style="width:30px;height:30px" strokeWidth="4" />
                 </div>
                 <div v-else>
-                  <DataTable :value="attendance" responsiveLayout="scroll" stripedRows class="p-datatable-sm">
-                    <Column field="attendance_date" header="Date" sortable>
-                      <template #body="{ data }">
-                        {{ formatDate(data.attendance_date) }}
-                      </template>
-                    </Column>
-                    <Column field="status" header="Status" sortable>
-                      <template #body="{ data }">
-                        <Tag 
-                          :value="formatAttendanceStatus(data.status)" 
-                          :severity="getAttendanceSeverity(data.status)"
-                        />
-                      </template>
-                    </Column>
-                    <Column field="clock_in" header="Clock In">
-                      <template #body="{ data }">
-                        {{ formatTime(data.clock_in) }}
-                      </template>
-                    </Column>
-                    <Column field="clock_out" header="Clock Out">
-                      <template #body="{ data }">
-                        {{ formatTime(data.clock_out) }}
-                      </template>
-                    </Column>
-                  </DataTable>
+                  <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-medium">Attendance Record</h3>
+                    <Dropdown 
+                      v-model="attendancePeriod" 
+                      :options="attendancePeriodOptions" 
+                      optionLabel="label"
+                      optionValue="value"
+                      class="w-40"
+                      @change="loadAttendance"
+                    />
+                  </div>
+                  <div v-if="attendance.length === 0" class="p-4 text-center text-gray-500">
+                    <p>No attendance records found</p>
+                  </div>
+                  <div v-else>
+                    <DataTable :value="attendance" responsiveLayout="scroll" stripedRows class="p-datatable-sm">
+                      <Column field="attendance_date" header="Date" sortable>
+                        <template #body="{ data }">
+                          {{ formatDate(data.attendance_date) }}
+                        </template>
+                      </Column>
+                      <Column field="status" header="Status" sortable>
+                        <template #body="{ data }">
+                          <Tag 
+                            :value="formatAttendanceStatus(data.status)" 
+                            :severity="getAttendanceSeverity(data.status)"
+                          />
+                        </template>
+                      </Column>
+                      <Column field="clock_in" header="Clock In">
+                        <template #body="{ data }">
+                          {{ formatTime(data.clock_in) }}
+                        </template>
+                      </Column>
+                      <Column field="clock_out" header="Clock Out">
+                        <template #body="{ data }">
+                          {{ formatTime(data.clock_out) }}
+                        </template>
+                      </Column>
+                    </DataTable>
+                  </div>
                 </div>
-              </div>
-            </TabPanel>
-            
-            <!-- Assessments Tab -->
-            <TabPanel header="Assessments">
-              <div v-if="assessmentsLoading" class="p-4 flex justify-center">
-                <ProgressSpinner style="width:30px;height:30px" strokeWidth="4" />
-              </div>
-              <div v-else>
-                <div class="flex justify-between items-center mb-4">
-                  <h3 class="text-lg font-medium">Assessment Results</h3>
-                  <Button
-                    icon="pi pi-plus"
-                    label="Add"
-                    severity="secondary"
-                    size="small"
-                    @click="$emit('add-assessment')"
-                  />
-                </div>
-                <div v-if="assessments.length === 0" class="p-4 text-center text-gray-500">
-                  <p>No assessment records found</p>
+              </TabPanel>
+              
+              <!-- Assessments Tab -->
+              <TabPanel value="assessments">
+                <div v-if="assessmentsLoading" class="p-4 flex justify-center">
+                  <ProgressSpinner style="width:30px;height:30px" strokeWidth="4" />
                 </div>
                 <div v-else>
-                  <DataTable :value="assessments" responsiveLayout="scroll" stripedRows class="p-datatable-sm">
-                    <Column field="assessment_date" header="Date" sortable>
-                      <template #body="{ data }">
-                        {{ formatDate(data.assessment_date) }}
-                      </template>
-                    </Column>
-                    <Column field="assessment_type" header="Type" sortable />
-                    <Column field="score" header="Score" sortable>
-                      <template #body="{ data }">
-                        <div class="flex items-center">
-                          <div class="w-12 text-right font-medium">{{ data.score }}%</div>
-                          <div class="flex-1 ml-2">
-                            <div class="bg-gray-200 rounded-full h-2 w-full">
-                              <div 
-                                class="h-2 rounded-full" 
-                                :class="getScoreColorClass(data.score)"
-                                :style="`width: ${data.score}%`"
-                              ></div>
+                  <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-medium">Assessment Results</h3>
+                    <Button
+                      icon="pi pi-plus"
+                      label="Add"
+                      severity="secondary"
+                      size="small"
+                      @click="$emit('add-assessment')"
+                    />
+                  </div>
+                  <div v-if="assessments.length === 0" class="p-4 text-center text-gray-500">
+                    <p>No assessment records found</p>
+                  </div>
+                  <div v-else>
+                    <DataTable :value="assessments" responsiveLayout="scroll" stripedRows class="p-datatable-sm">
+                      <Column field="assessment_date" header="Date" sortable>
+                        <template #body="{ data }">
+                          {{ formatDate(data.assessment_date) }}
+                        </template>
+                      </Column>
+                      <Column field="assessment_type" header="Type" sortable />
+                      <Column field="score" header="Score" sortable>
+                        <template #body="{ data }">
+                          <div class="flex items-center">
+                            <div class="w-12 text-right font-medium">{{ data.score }}%</div>
+                            <div class="flex-1 ml-2">
+                              <div class="bg-gray-200 rounded-full h-2 w-full">
+                                <div 
+                                  class="h-2 rounded-full" 
+                                  :class="getScoreColorClass(data.score)"
+                                  :style="`width: ${data.score}%`"
+                                ></div>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </template>
-                    </Column>
-                    <Column field="comment" header="Comments">
-                      <template #body="{ data }">
-                        <div class="max-w-xs truncate">{{ data.comment || '-' }}</div>
-                      </template>
-                    </Column>
-                  </DataTable>
+                        </template>
+                      </Column>
+                      <Column field="comment" header="Comments">
+                        <template #body="{ data }">
+                          <div class="max-w-xs truncate">{{ data.comment || '-' }}</div>
+                        </template>
+                      </Column>
+                    </DataTable>
+                  </div>
                 </div>
-              </div>
-            </TabPanel>
-            
-            <!-- Communications Tab (New) -->
-            <TabPanel header="Communications">
-              <div v-if="communicationsLoading" class="p-4 flex justify-center">
-                <ProgressSpinner style="width:30px;height:30px" strokeWidth="4" />
-              </div>
-              <div v-else>
-                <div class="flex justify-between items-center mb-4">
-                  <h3 class="text-lg font-medium">Communication History</h3>
-                  <Button
-                    icon="pi pi-envelope"
-                    label="New Email"
-                    severity="secondary"
-                    size="small"
-                    @click="showSendEmailModal = true"
-                  />
-                </div>
-                <div v-if="communications.length === 0" class="p-4 text-center text-gray-500">
-                  <p>No communication records found</p>
+              </TabPanel>
+              
+              <!-- Communications Tab -->
+              <TabPanel value="communications">
+                <div v-if="communicationsLoading" class="p-4 flex justify-center">
+                  <ProgressSpinner style="width:30px;height:30px" strokeWidth="4" />
                 </div>
                 <div v-else>
-                  <DataTable :value="communications" responsiveLayout="scroll" stripedRows class="p-datatable-sm">
-                    <Column field="sent_at" header="Date" sortable>
-                      <template #body="{ data }">
-                        {{ formatDate(data.sent_at) }}
-                      </template>
-                    </Column>
-                    <Column field="type" header="Type" sortable>
-                      <template #body="{ data }">
-                        <Tag 
-                          :value="formatCommunicationType(data.type)" 
-                          :severity="getCommunicationTypeSeverity(data.type)"
-                        />
-                      </template>
-                    </Column>
-                    <Column field="subject" header="Subject">
-                      <template #body="{ data }">
-                        <div class="max-w-xs truncate font-medium">{{ data.subject || '(No subject)' }}</div>
-                      </template>
-                    </Column>
-                    <Column header="Actions" style="width: 100px">
-                      <template #body="{ data }">
-                        <Button
-                          icon="pi pi-eye"
-                          text
-                          rounded
-                          @click="viewCommunication(data)"
-                          aria-label="View"
-                        />
-                      </template>
-                    </Column>
-                  </DataTable>
+                  <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-medium">Communication History</h3>
+                    <Button
+                      icon="pi pi-envelope"
+                      label="New Email"
+                      severity="secondary"
+                      size="small"
+                      @click="showSendEmailModal = true"
+                    />
+                  </div>
+                  <div v-if="communications.length === 0" class="p-4 text-center text-gray-500">
+                    <p>No communication records found</p>
+                  </div>
+                  <div v-else>
+                    <DataTable :value="communications" responsiveLayout="scroll" stripedRows class="p-datatable-sm">
+                      <Column field="sent_at" header="Date" sortable>
+                        <template #body="{ data }">
+                          {{ formatDate(data.sent_at) }}
+                        </template>
+                      </Column>
+                      <Column field="type" header="Type" sortable>
+                        <template #body="{ data }">
+                          <Tag 
+                            :value="formatCommunicationType(data.type)" 
+                            :severity="getCommunicationTypeSeverity(data.type)"
+                          />
+                        </template>
+                      </Column>
+                      <Column field="subject" header="Subject">
+                        <template #body="{ data }">
+                          <div class="max-w-xs truncate font-medium">{{ data.subject || '(No subject)' }}</div>
+                        </template>
+                      </Column>
+                      <Column header="Actions" style="width: 100px">
+                        <template #body="{ data }">
+                          <Button
+                            icon="pi pi-eye"
+                            text
+                            rounded
+                            @click="viewCommunication(data)"
+                            aria-label="View"
+                          />
+                        </template>
+                      </Column>
+                    </DataTable>
+                  </div>
                 </div>
-              </div>
-            </TabPanel>
-            
-            <!-- Additional Tabs (Documents, Certifications, etc.) go here -->
-            <!-- … -->
-          </TabView>
+              </TabPanel>
+            </TabPanels>
+          </Tabs>
         </div>
       </div>
     </div>
@@ -332,7 +336,10 @@
 import { ref, watch, computed } from 'vue';
 import { useToast } from 'primevue/usetoast';
 import ProgressSpinner from 'primevue/progressspinner';
-import TabView from 'primevue/tabview';
+import Tabs from 'primevue/tabs';
+import TabList from 'primevue/tablist';
+import Tab from 'primevue/tab';
+import TabPanels from 'primevue/tabpanels';
 import TabPanel from 'primevue/tabpanel';
 import DataTable from 'primevue/datatable';
 import Column from 'primevue/column';
@@ -371,7 +378,10 @@ const emit = defineEmits([
 
 const toast = useToast();
 
-// Local state for tabs (you may want to extract this logic into a composable for reuse)
+// Active tab state
+const activeTab = ref('attendance');
+
+// Local state for tabs
 const attendance = ref([]);
 const attendancePeriodOptions = [
   { label: 'Last 30 days', value: '30days' },
@@ -412,7 +422,7 @@ watch(
   { immediate: true }
 );
 
-// Methods to load data (simplified example)
+// Methods to load data
 async function loadAttendance() {
   if (!props.student?.id) return;
   attendanceLoading.value = true;
