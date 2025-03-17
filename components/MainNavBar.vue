@@ -9,8 +9,9 @@
           </div>
           <!-- Desktop Navigation -->
           <div class="hidden sm:ml-6 sm:flex sm:space-x-8">
+            <!-- Top-level menu items without dropdowns -->
             <NuxtLink
-              v-for="item in navigationItems"
+              v-for="item in topLevelItems"
               :key="item.path"
               :to="item.path"
               class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
@@ -19,37 +20,44 @@
               {{ item.label }}
             </NuxtLink>
             
-            <div class="relative inline-flex items-center communications-dropdown">
+            <!-- Dropdown menu items -->
+            <div 
+              v-for="dropdown in dropdownItems" 
+              :key="dropdown.label"
+              class="relative inline-flex items-center dropdown-menu"
+            >
               <button
-                @click="toggleCommunicationsMenu"
+                @click="toggleDropdownMenu(dropdown.label)"
                 type="button"
                 class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                :class="{ 'border-primary-500 text-primary-600': route.path.startsWith('/communications') || route.path.startsWith('/admin/templates') }"
+                :class="{ 'border-primary-500 text-primary-600': isActiveDropdown(dropdown) }"
               >
-                Communications
+                {{ dropdown.label }}
                 <i class="pi pi-chevron-down ml-1 text-xs"></i>
               </button>
               
               <div 
-                v-show="showCommunicationsMenu" 
+                v-show="activeDropdowns[dropdown.label]" 
                 class="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none z-10"
                 style="top: 100%"
               >
                 <div class="py-1">
-                  <NuxtLink 
-                    to="/admin/templates" 
-                    class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    @click="showCommunicationsMenu = false"
-                  >
-                    Email Templates
-                  </NuxtLink>
-                  <NuxtLink 
-                    to="/communications/history" 
-                    class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    @click="showCommunicationsMenu = false"
-                  >
-                    Communication History
-                  </NuxtLink>
+                  <template v-for="(group, groupIndex) in dropdown.items" :key="groupIndex">
+                    <template v-for="section in group" :key="section.label">
+                      <div v-if="section.label" class="px-4 py-2 text-xs font-semibold text-gray-500">
+                        {{ section.label }}
+                      </div>
+                      <NuxtLink 
+                        v-for="item in section.items" 
+                        :key="item.path"
+                        :to="item.path"
+                        class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        @click="closeAllDropdowns"
+                      >
+                        {{ item.label }}
+                      </NuxtLink>
+                    </template>
+                  </template>
                 </div>
               </div>
             </div>
@@ -91,8 +99,9 @@
     <!-- Mobile menu -->
     <Sidebar v-model:visible="mobileMenuOpen" position="right">
       <div class="pt-2 pb-3 space-y-1">
+        <!-- Top level items -->
         <NuxtLink
-          v-for="item in navigationItems"
+          v-for="item in topLevelItems"
           :key="item.path"
           :to="item.path"
           class="block px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100"
@@ -102,28 +111,37 @@
           {{ item.label }}
         </NuxtLink>
         
-        <!-- Mobile Communications Menu -->
-        <div class="block px-4 py-2">
-          <div class="flex items-center justify-between text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100" @click="mobileCommunicationsExpanded = !mobileCommunicationsExpanded">
-            <span>Communications</span>
-            <i :class="['pi', mobileCommunicationsExpanded ? 'pi-chevron-up' : 'pi-chevron-down']"></i>
+        <!-- Mobile Dropdown Menus -->
+        <div 
+          v-for="dropdown in dropdownItems" 
+          :key="dropdown.label" 
+          class="block px-4 py-2"
+        >
+          <div 
+            class="flex items-center justify-between text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100" 
+            @click="toggleMobileSubmenu(dropdown.label)"
+          >
+            <span>{{ dropdown.label }}</span>
+            <i :class="['pi', mobileExpandedMenus[dropdown.label] ? 'pi-chevron-up' : 'pi-chevron-down']"></i>
           </div>
           
-          <div v-show="mobileCommunicationsExpanded" class="pl-4 mt-2 space-y-1">
-            <NuxtLink 
-              to="/admin/templates" 
-              class="block py-2 text-sm font-medium text-gray-500 hover:text-gray-800"
-              @click="mobileMenuOpen = false"
-            >
-              Email Templates
-            </NuxtLink>
-            <NuxtLink 
-              to="/communications/history" 
-              class="block py-2 text-sm font-medium text-gray-500 hover:text-gray-800"
-              @click="mobileMenuOpen = false"
-            >
-              Communication History
-            </NuxtLink>
+          <div v-show="mobileExpandedMenus[dropdown.label]" class="pl-4 mt-2 space-y-1">
+            <template v-for="(group, groupIndex) in dropdown.items" :key="groupIndex">
+              <template v-for="section in group" :key="section.label">
+                <div v-if="section.label" class="text-xs font-semibold text-gray-500 mt-2 mb-1">
+                  {{ section.label }}
+                </div>
+                <NuxtLink 
+                  v-for="item in section.items" 
+                  :key="item.path"
+                  :to="item.path"
+                  class="block py-2 text-sm font-medium text-gray-500 hover:text-gray-800"
+                  @click="mobileMenuOpen = false"
+                >
+                  {{ item.label }}
+                </NuxtLink>
+              </template>
+            </template>
           </div>
         </div>
         
@@ -140,28 +158,56 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { useToast } from 'primevue/usetoast'
+import { ref, onMounted, onUnmounted, computed, watchEffect } from '#imports'
 import { useUserStore } from '~/stores/user'
+import { useNavigation } from '~/composables/useNavigation'
 import TieredMenu from 'primevue/tieredmenu'
 import Button from 'primevue/button'
 import Sidebar from 'primevue/sidebar'
+import { useToast } from 'primevue/usetoast'
 
 const route = useRoute()
-const router = useRouter()
 const toast = useToast()
 const userStore = useUserStore()
+const navigation = useNavigation()
 const mobileMenuOpen = ref(false)
 const userMenu = ref()
-const showCommunicationsMenu = ref(false)
-const mobileCommunicationsExpanded = ref(false)
+const activeDropdowns = ref<Record<string, boolean>>({})
+const mobileExpandedMenus = ref<Record<string, boolean>>({})
 
-const navigationItems = [
-  { label: 'Dashboard', path: '/dashboard' },
-  { label: 'Students', path: '/students' },
-  { label: 'Leads', path: '/leads' }
-]
+// Set navigation role based on user role
+watchEffect(() => {
+  if (userStore.role) {
+    navigation.setRole(userStore.role)
+  }
+})
+
+// Separate navigation items into top-level and dropdown menus
+const topLevelItems = computed(() => {
+  return navigation.navigationItems.value.filter(item => !item.items)
+})
+
+const dropdownItems = computed(() => {
+  return navigation.navigationItems.value.filter(item => item.items)
+})
+
+// Check if a dropdown should be highlighted based on current route
+const isActiveDropdown = (dropdown: any) => {
+  if (!dropdown.items) return false
+  
+  // Check if any child item path matches the current route
+  for (const group of dropdown.items) {
+    for (const section of group) {
+      for (const item of section.items) {
+        if (route.path.startsWith(item.path)) {
+          return true
+        }
+      }
+    }
+  }
+  
+  return false
+}
 
 onMounted(async () => {
   // Fetch user data if not already loaded
@@ -184,7 +230,7 @@ const handleLogout = async () => {
     })
     
     userStore.clearUser()
-    router.push('/login')
+    navigateTo('/login')
     
     toast.add({
       severity: 'success',
@@ -207,17 +253,41 @@ const toggleUserMenu = (event: Event) => {
   userMenu.value?.toggle(event)
 }
 
-const toggleCommunicationsMenu = (event: Event) => {
-  event.stopPropagation()
-  showCommunicationsMenu.value = !showCommunicationsMenu.value
+const toggleDropdownMenu = (name: string) => {
+  // Close all other dropdowns
+  Object.keys(activeDropdowns.value).forEach(key => {
+    if (key !== name) {
+      activeDropdowns.value[key] = false
+    }
+  })
+  
+  // Toggle this dropdown
+  activeDropdowns.value[name] = !activeDropdowns.value[name]
+}
+
+const toggleMobileSubmenu = (name: string) => {
+  mobileExpandedMenus.value[name] = !mobileExpandedMenus.value[name]
+}
+
+const closeAllDropdowns = () => {
+  Object.keys(activeDropdowns.value).forEach(key => {
+    activeDropdowns.value[key] = false
+  })
 }
 
 const handleClickOutside = (event: Event) => {
   const target = event.target as HTMLElement
-  const dropdown = document.querySelector('.communications-dropdown')
+  const dropdowns = document.querySelectorAll('.dropdown-menu')
   
-  if (dropdown && !dropdown.contains(target)) {
-    showCommunicationsMenu.value = false
+  let insideDropdown = false
+  dropdowns.forEach(dropdown => {
+    if (dropdown.contains(target)) {
+      insideDropdown = true
+    }
+  })
+  
+  if (!insideDropdown) {
+    closeAllDropdowns()
   }
 }
 
@@ -225,7 +295,11 @@ const menuItems = [
   {
     label: 'Profile',
     icon: 'pi pi-user',
-    command: () => router.push('/profile')
+    command: () => navigateTo('/profile')
+  },
+  {
+    label: `Role: ${userStore.role || 'User'}`,
+    disabled: true
   },
   {
     separator: true
@@ -237,3 +311,6 @@ const menuItems = [
   }
 ]
 </script>
+
+<style scoped>
+</style>

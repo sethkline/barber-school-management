@@ -2,7 +2,7 @@
   <div>
     <!-- Loading state -->
     <div v-if="loading" class="flex justify-center items-center p-4">
-      <ProgressSpinner style="width:50px;height:50px" strokeWidth="4" />
+      <ProgressSpinner style="width: 50px; height: 50px" strokeWidth="4" />
     </div>
 
     <!-- Student not found -->
@@ -19,22 +19,16 @@
         <div class="col-span-1">
           <div class="flex flex-col items-center">
             <div class="w-32 h-32 rounded-full mb-4 bg-gray-200 flex items-center justify-center overflow-hidden">
-              <img 
-                v-if="student.photo_url" 
-                :src="student.photo_url" 
+              <img
+                v-if="student.photo_url"
+                :src="student.photo_url"
                 alt="Student photo"
                 class="w-full h-full object-cover"
               />
               <i v-else class="pi pi-user text-5xl text-gray-400"></i>
             </div>
-            <h2 class="text-xl font-bold text-center mb-1">
-              {{ student.first_name }} {{ student.last_name }}
-            </h2>
-            <Tag 
-              :value="formatStatus(student.status)" 
-              :severity="getStatusSeverity(student.status)"
-              class="mb-3"
-            />
+            <h2 class="text-xl font-bold text-center mb-1">{{ student.first_name }} {{ student.last_name }}</h2>
+            <Tag :value="formatStatus(student.status)" :severity="getStatusSeverity(student.status)" class="mb-3" />
             <div class="w-full space-y-2 mt-2">
               <div class="flex items-center">
                 <i class="pi pi-envelope text-gray-500 mr-2"></i>
@@ -81,27 +75,28 @@
             </div>
           </div>
         </div>
-        
+
         <!-- Right column with tabs -->
         <div class="col-span-2">
           <Tabs v-model:value="activeTab">
             <TabList>
               <Tab value="attendance">Attendance</Tab>
               <Tab value="assessments">Assessments</Tab>
+              <Tab value="hours">Hours</Tab>
               <Tab value="communications">Communications</Tab>
             </TabList>
             <TabPanels>
               <!-- Attendance Tab -->
               <TabPanel value="attendance">
                 <div v-if="attendanceLoading" class="p-4 flex justify-center">
-                  <ProgressSpinner style="width:30px;height:30px" strokeWidth="4" />
+                  <ProgressSpinner style="width: 30px; height: 30px" strokeWidth="4" />
                 </div>
                 <div v-else>
                   <div class="flex justify-between items-center mb-4">
                     <h3 class="text-lg font-medium">Attendance Record</h3>
-                    <Dropdown 
-                      v-model="attendancePeriod" 
-                      :options="attendancePeriodOptions" 
+                    <Dropdown
+                      v-model="attendancePeriod"
+                      :options="attendancePeriodOptions"
                       optionLabel="label"
                       optionValue="value"
                       class="w-40"
@@ -120,8 +115,8 @@
                       </Column>
                       <Column field="status" header="Status" sortable>
                         <template #body="{ data }">
-                          <Tag 
-                            :value="formatAttendanceStatus(data.status)" 
+                          <Tag
+                            :value="formatAttendanceStatus(data.status)"
                             :severity="getAttendanceSeverity(data.status)"
                           />
                         </template>
@@ -140,11 +135,11 @@
                   </div>
                 </div>
               </TabPanel>
-              
+
               <!-- Assessments Tab -->
               <TabPanel value="assessments">
                 <div v-if="assessmentsLoading" class="p-4 flex justify-center">
-                  <ProgressSpinner style="width:30px;height:30px" strokeWidth="4" />
+                  <ProgressSpinner style="width: 30px; height: 30px" strokeWidth="4" />
                 </div>
                 <div v-else>
                   <div class="flex justify-between items-center mb-4">
@@ -174,8 +169,8 @@
                             <div class="w-12 text-right font-medium">{{ data.score }}%</div>
                             <div class="flex-1 ml-2">
                               <div class="bg-gray-200 rounded-full h-2 w-full">
-                                <div 
-                                  class="h-2 rounded-full" 
+                                <div
+                                  class="h-2 rounded-full"
                                   :class="getScoreColorClass(data.score)"
                                   :style="`width: ${data.score}%`"
                                 ></div>
@@ -193,11 +188,16 @@
                   </div>
                 </div>
               </TabPanel>
-              
+
+              <!-- Hours Tab -->
+              <TabPanel value="hours">
+                <StudentsStudentDetailHoursTab :student-id="student.id" @refresh="loadHoursData" />
+              </TabPanel>
+
               <!-- Communications Tab -->
               <TabPanel value="communications">
                 <div v-if="communicationsLoading" class="p-4 flex justify-center">
-                  <ProgressSpinner style="width:30px;height:30px" strokeWidth="4" />
+                  <ProgressSpinner style="width: 30px; height: 30px" strokeWidth="4" />
                 </div>
                 <div v-else>
                   <div class="flex justify-between items-center mb-4">
@@ -222,8 +222,8 @@
                       </Column>
                       <Column field="type" header="Type" sortable>
                         <template #body="{ data }">
-                          <Tag 
-                            :value="formatCommunicationType(data.type)" 
+                          <Tag
+                            :value="formatCommunicationType(data.type)"
                             :severity="getCommunicationTypeSeverity(data.type)"
                           />
                         </template>
@@ -235,13 +235,7 @@
                       </Column>
                       <Column header="Actions" style="width: 100px">
                         <template #body="{ data }">
-                          <Button
-                            icon="pi pi-eye"
-                            text
-                            rounded
-                            @click="viewCommunication(data)"
-                            aria-label="View"
-                          />
+                          <Button icon="pi pi-eye" text rounded @click="viewCommunication(data)" aria-label="View" />
                         </template>
                       </Column>
                     </DataTable>
@@ -263,23 +257,18 @@
         :disabled="loading || !student.id"
         severity="secondary"
       />
-      <Button
-        label="Close"
-        icon="pi pi-times"
-        @click="close"
-        :disabled="loading"
-      />
+      <Button label="Close" icon="pi pi-times" @click="close" :disabled="loading" />
     </div>
 
     <!-- Send Email Modal -->
-    <Dialog 
-      v-model:visible="showSendEmailModal" 
-      header="Send Email to Student" 
+    <Dialog
+      v-model:visible="showSendEmailModal"
+      header="Send Email to Student"
       :modal="true"
       :closable="true"
       :style="{ width: '500px' }"
     >
-      <SendEmailForm 
+      <SendEmailForm
         :recipient-email="student.email"
         recipient-type="student"
         :recipient-id="student.id"
@@ -289,9 +278,9 @@
     </Dialog>
 
     <!-- View Communication Dialog -->
-    <Dialog 
-      v-model:visible="showViewCommunicationDialog" 
-      :header="selectedCommunication?.subject || 'Communication Details'" 
+    <Dialog
+      v-model:visible="showViewCommunicationDialog"
+      :header="selectedCommunication?.subject || 'Communication Details'"
       :modal="true"
       :closable="true"
       :style="{ width: '600px' }"
@@ -300,32 +289,18 @@
         <div class="flex justify-between items-start">
           <div>
             <p class="text-sm text-gray-600">To: {{ selectedCommunication.to_email }}</p>
-            <p class="text-sm text-gray-600">
-              Sent: {{ formatDateTime(selectedCommunication.sent_at) }}
-            </p>
-            <p class="text-sm text-gray-600">
-              Type: {{ formatCommunicationType(selectedCommunication.type) }}
-            </p>
+            <p class="text-sm text-gray-600">Sent: {{ formatDateTime(selectedCommunication.sent_at) }}</p>
+            <p class="text-sm text-gray-600">Type: {{ formatCommunicationType(selectedCommunication.type) }}</p>
           </div>
         </div>
-        
+
         <div class="border-t border-b py-4">
           <div v-html="selectedCommunication.body" class="prose max-w-none"></div>
         </div>
-        
+
         <div class="flex justify-end">
-          <Button 
-            icon="pi pi-envelope" 
-            label="Reply" 
-            @click="replyToCommunication" 
-            class="mr-2"
-          />
-          <Button 
-            icon="pi pi-times" 
-            label="Close" 
-            severity="secondary"
-            @click="showViewCommunicationDialog = false"
-          />
+          <Button icon="pi pi-envelope" label="Reply" @click="replyToCommunication" class="mr-2" />
+          <Button icon="pi pi-times" label="Close" severity="secondary" @click="showViewCommunicationDialog = false" />
         </div>
       </div>
     </Dialog>
@@ -485,6 +460,29 @@ async function loadCommunications() {
   }
 }
 
+const hours = ref([]);
+const hoursLoading = ref(false);
+
+// load hours data
+async function loadHoursData() {
+  if (!props.student?.id) return;
+  hoursLoading.value = true;
+  try {
+    const response = await $fetch(`/api/hours/records/${props.student.id}`);
+    hours.value = response.data || [];
+  } catch (error) {
+    console.error('Failed to load hours:', error);
+    toast.add({
+      severity: 'error',
+      summary: 'Error',
+      detail: 'Failed to load hours records',
+      life: 3000
+    });
+  } finally {
+    hoursLoading.value = false;
+  }
+}
+
 // Helper functions
 function formatDate(dateString: string | null): string {
   if (!dateString) return 'N/A';
@@ -610,17 +608,17 @@ function replyToCommunication() {
 function onEmailSent() {
   showSendEmailModal.value = false;
   showViewCommunicationDialog.value = false;
-  
+
   toast.add({
     severity: 'success',
     summary: 'Email Sent',
     detail: 'Email has been sent successfully.',
     life: 3000
   });
-  
+
   // Refresh communications list
   loadCommunications();
-  
+
   // Notify parent component
   emit('refresh-communications');
 }

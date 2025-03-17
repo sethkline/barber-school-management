@@ -47,7 +47,7 @@
       </template>
     </Card>
     
-    <!-- Tasks View Tabs -->
+    <!-- Tasks View Tabs TabMenu doesn't exist in updated version of primevue-->
     <TabMenu :model="tabItems" v-model:activeIndex="activeTabIndex" />
     
     <!-- Tasks Table -->
