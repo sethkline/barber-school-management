@@ -11,14 +11,24 @@
         <div class="bg-white rounded-lg shadow p-4 mb-6">
           <!-- Mini Calendar for Navigation -->
           <div class="mb-4">
-            <Calendar v-model="selectedDate" inline @date-select="handleDateSelect" />
+            <Calendar
+              v-model="selectedDate"
+              inline
+              @date-select="handleDateSelect"
+              class="w-full"
+              :pt="{
+                root: { class: 'mini-calendar' },
+                table: { style: { fontSize: '0.75rem' } },
+                day: { style: { width: '1.5rem', height: '1.5rem' } }
+              }"
+            />
           </div>
 
           <!-- Create Event Button -->
-          <Button 
-            label="Create Event" 
-            icon="pi pi-plus" 
-            class="w-full mb-4 custom-button" 
+          <Button
+            label="Create Event"
+            icon="pi pi-plus"
+            class="w-full mb-4 custom-button"
             @click="openEventDialog(null)"
           />
 
@@ -27,15 +37,10 @@
             <h3 class="text-lg font-medium mb-2">Event Categories</h3>
             <div class="space-y-2">
               <div v-for="category in categories" :key="category.id" class="flex items-center">
-                <Checkbox 
-                  v-model="selectedCategories" 
-                  :value="category.id" 
-                  :inputId="category.id" 
-                  :binary="false"
-                />
+                <Checkbox v-model="selectedCategories" :value="category.id" :inputId="category.id" :binary="false" />
                 <label :for="category.id" class="ml-2 flex items-center">
-                  <span 
-                    class="inline-block w-3 h-3 rounded-full mr-2" 
+                  <span
+                    class="inline-block w-3 h-3 rounded-full mr-2"
                     :style="{ backgroundColor: category.color }"
                   ></span>
                   {{ category.name }}
@@ -47,13 +52,11 @@
           <!-- Upcoming Events -->
           <div>
             <h3 class="text-lg font-medium mb-2">Upcoming Events</h3>
-            <div v-if="upcomingEvents.length === 0" class="text-gray-500 text-sm">
-              No upcoming events
-            </div>
+            <div v-if="upcomingEvents.length === 0" class="text-gray-500 text-sm">No upcoming events</div>
             <div v-else class="space-y-3">
-              <div 
-                v-for="event in upcomingEvents" 
-                :key="event.id" 
+              <div
+                v-for="event in upcomingEvents"
+                :key="event.id"
                 class="p-3 rounded-lg border-l-4 cursor-pointer"
                 :class="getEventBorderClass(event)"
                 @click="openEventDialog(event)"
@@ -72,51 +75,36 @@
           <!-- Calendar Header -->
           <div class="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
             <div class="flex items-center">
-              <Button 
-                icon="pi pi-chevron-left" 
-                text 
-                rounded 
-                aria-label="Previous" 
-                @click="handlePrev"
-              />
+              <Button icon="pi pi-chevron-left" text rounded aria-label="Previous" @click="handlePrev" />
               <h2 class="text-xl font-bold mx-4">{{ currentViewTitle }}</h2>
-              <Button 
-                icon="pi pi-chevron-right" 
-                text 
-                rounded 
-                aria-label="Next" 
-                @click="handleNext"
-              />
-              <Button 
-                label="Today" 
-                text 
-                @click="handleToday" 
-                class="ml-2"
-              />
+              <Button icon="pi pi-chevron-right" text rounded aria-label="Next" @click="handleNext" />
+              <Button label="Today" text @click="handleToday" class="ml-2" />
             </div>
-
             <div class="flex items-center gap-2">
-              <SelectButton v-model="currentView" :options="viewOptions" optionLabel="label" aria-label="View" />
+              <SelectButton
+                v-model="currentView"
+                :options="viewOptions"
+                @change="handleViewChange"
+                optionLabel="label"
+                aria-label="View"
+              />
             </div>
           </div>
 
           <!-- FullCalendar Component -->
           <div class="calendar-container">
-            <FullCalendar 
-              ref="fullCalendar"
-              :options="calendarOptions"
-            />
+            <FullCalendar ref="fullCalendar" :options="calendarOptions" />
           </div>
         </div>
       </div>
     </div>
 
     <!-- Event Dialog -->
-    <Dialog 
-      v-model:visible="eventDialogVisible" 
-      :style="{ width: '500px' }" 
-      :header="dialogMode === 'create' ? 'Create Event' : 'Edit Event'" 
-      :modal="true" 
+    <Dialog
+      v-model:visible="eventDialogVisible"
+      :style="{ width: '500px' }"
+      :header="dialogMode === 'create' ? 'Create Event' : 'Edit Event'"
+      :modal="true"
       :closable="!isLoading"
       @hide="resetEventForm"
     >
@@ -205,7 +193,7 @@ const relatedOptions = ref([
 const calendarOptions = computed(() => ({
   plugins: [dayGridPlugin, timeGridPlugin, interactionPlugin],
   initialView: currentView.value,
-  headerToolbar: false, // Custom header implemented in template
+  headerToolbar: false,
   events: filteredEvents.value,
   editable: true,
   selectable: true,
@@ -229,21 +217,29 @@ const calendarOptions = computed(() => ({
 onMounted(async () => {
   // Fetch events
   await fetchEvents();
-  
+
   // In a real app, you would fetch related entities here
   // For example: relatedOptions.value = await $fetch('/api/students')
 });
 
 // Watch for view changes to update the title
 watch(currentView, () => {
+  ``;
   updateCalendar();
 });
 
 // Methods for calendar navigation
+function updateViewTitle() {
+  if (fullCalendar.value) {
+    const calendarApi = fullCalendar.value.getApi();
+    currentViewTitle.value = calendarApi.view.title;
+  }
+}
 function handlePrev() {
   if (fullCalendar.value) {
     const calendarApi = fullCalendar.value.getApi();
     calendarApi.prev();
+    updateViewTitle();
   }
 }
 
@@ -251,6 +247,7 @@ function handleNext() {
   if (fullCalendar.value) {
     const calendarApi = fullCalendar.value.getApi();
     calendarApi.next();
+    updateViewTitle();
   }
 }
 
@@ -258,6 +255,33 @@ function handleToday() {
   if (fullCalendar.value) {
     const calendarApi = fullCalendar.value.getApi();
     calendarApi.today();
+    // chanage to day view
+    calendarApi.changeView('timeGridDay');
+    currentView.value = viewOptions.find((option) => option.value === 'timeGridDay');
+    updateViewTitle();
+    selectedDate.value = new Date();
+  }
+}
+
+watch(
+  () => fullCalendar.value,
+  (newVal) => {
+    if (newVal) {
+      // Wait for the calendar to be fully initialized
+      setTimeout(() => {
+        updateViewTitle();
+      }, 0);
+    }
+  },
+  { immediate: true }
+);
+
+function handleViewChange(event: any) {
+  if (fullCalendar.value) {
+    const calendarApi = fullCalendar.value.getApi();
+    const viewName = typeof event.value === 'string' ? event.value : event.value.value;
+    calendarApi.changeView(viewName);
+    updateViewTitle();
   }
 }
 
@@ -271,6 +295,7 @@ function handleDateSelect(selectInfo: any) {
     if (fullCalendar.value) {
       const calendarApi = fullCalendar.value.getApi();
       calendarApi.gotoDate(selectInfo);
+      updateViewTitle();
     }
   }
 }
@@ -285,16 +310,15 @@ function handleEventDrop(dropInfo: any) {
     start: dropInfo.event.start,
     end: dropInfo.event.end || dropInfo.event.start
   };
-  
-  updateEvent(eventId, eventData)
-    .then(() => {
-      toast.add({
-        severity: 'success',
-        summary: 'Event Updated',
-        detail: 'Event has been rescheduled',
-        life: 3000
-      });
+
+  updateEvent(eventId, eventData).then(() => {
+    toast.add({
+      severity: 'success',
+      summary: 'Event Updated',
+      detail: 'Event has been rescheduled',
+      life: 3000
     });
+  });
 }
 
 function handleEventResize(resizeInfo: any) {
@@ -303,16 +327,15 @@ function handleEventResize(resizeInfo: any) {
     start: resizeInfo.event.start,
     end: resizeInfo.event.end
   };
-  
-  updateEvent(eventId, eventData)
-    .then(() => {
-      toast.add({
-        severity: 'success',
-        summary: 'Event Updated',
-        detail: 'Event duration has been updated',
-        life: 3000
-      });
+
+  updateEvent(eventId, eventData).then(() => {
+    toast.add({
+      severity: 'success',
+      summary: 'Event Updated',
+      detail: 'Event duration has been updated',
+      life: 3000
     });
+  });
 }
 
 // Event CRUD operations
@@ -325,7 +348,7 @@ function openEventDialog(event: any, startStr?: string, endStr?: string) {
     // Create new event
     dialogMode.value = 'create';
     selectedEvent.value = null;
-    
+
     // If start and end times provided (from calendar select)
     if (startStr && endStr) {
       selectedEvent.value = {
@@ -334,7 +357,7 @@ function openEventDialog(event: any, startStr?: string, endStr?: string) {
       };
     }
   }
-  
+
   eventDialogVisible.value = true;
 }
 
@@ -353,7 +376,7 @@ async function saveEvent(eventData: any) {
       // Update existing event
       await updateEvent(eventData.id, eventData);
     }
-    
+
     // Close dialog
     eventDialogVisible.value = false;
   } catch (err) {
@@ -368,13 +391,12 @@ function confirmDeleteEvent(eventId: string) {
     icon: 'pi pi-exclamation-triangle',
     acceptClass: 'p-button-danger',
     accept: () => {
-      deleteEvent(eventId)
-        .then(() => {
-          // Close dialog if open
-          if (eventDialogVisible.value) {
-            eventDialogVisible.value = false;
-          }
-        });
+      deleteEvent(eventId).then(() => {
+        // Close dialog if open
+        if (eventDialogVisible.value) {
+          eventDialogVisible.value = false;
+        }
+      });
     }
   });
 }
@@ -420,7 +442,8 @@ function getEventBorderClass(event: any): string {
   font-family: inherit;
 }
 
-:deep(.fc-theme-standard td), :deep(.fc-theme-standard th) {
+:deep(.fc-theme-standard td),
+:deep(.fc-theme-standard th) {
   border-color: var(--fc-border-color);
 }
 
