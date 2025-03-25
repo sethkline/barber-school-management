@@ -26,13 +26,23 @@ export default defineEventHandler(async (event: H3Event) => {
       // Set maxAge appropriate for your refresh token lifetime.
     })
     
-    // Return only the necessary user information.
+    // Get user metadata to extract role
+    const userMetadata = result.user.user_metadata || {}
+    const appMetadata = result.user.app_metadata || {}
+    
+    // Extract first name and last name from metadata if available
+    const firstName = userMetadata.first_name || ''
+    const lastName = userMetadata.last_name || ''
+    
+    // Return user information with properly extracted role
     return {
       user: {
         id: result.user.id,
         email: result.user.email,
-        // Optionally, if you want to pass a role or other minimal info:
-        role: result.user.role
+        firstName: firstName,
+        lastName: lastName,
+        // Look for role in user_metadata first, then app_metadata, with a fallback to 'user'
+        role: userMetadata.role || appMetadata.role || 'admin' // Default to admin for now
       }
     }
   } catch (error: any) {

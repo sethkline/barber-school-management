@@ -33,6 +33,7 @@
     "primevue": "^4.2.5",
     "tailwindcss-primeui": "^0.4.0",
     "vue": "latest",
+    "vue-advanced-cropper": "^2.8.9",
     "vue-router": "latest",
     "yup": "^1.6.1"
   },

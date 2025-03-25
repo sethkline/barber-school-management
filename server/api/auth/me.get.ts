@@ -1,6 +1,6 @@
 // server/api/auth/me.ts
 import { getSupabaseClient } from '~/server/utils/supabaseClient'
-import { getCookie } from 'h3'
+import { getCookie, createError } from 'h3'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -28,27 +28,36 @@ export default defineEventHandler(async (event) => {
       })
     }
     
-    // You may need to fetch additional user data from your database
-    // Based on your Supabase schema from the uploaded files
-    // It seems you don't have a profiles table yet, so let's use students table
-    // if the user is a student, or another appropriate table based on role
-    
     const user = data.user
-    let firstName = null
-    let lastName = null
-    let role = 'user' // Default role
     
-    // Try to find the user in the students table
-    const { data: studentData } = await supabase
-      .from('students')
-      .select('first_name, last_name')
-      .eq('email', user.email)
-      .single()
-      
-    if (studentData) {
-      firstName = studentData.first_name
-      lastName = studentData.last_name
-      role = 'student'
+    // Extract metadata
+    const userMetadata = user.user_metadata || {}
+    const appMetadata = user.app_metadata || {}
+    
+    // Get first name and last name from metadata if available
+    let firstName = userMetadata.first_name || null
+    let lastName = userMetadata.last_name || null
+    
+    // Extract additional fields from metadata
+    let phone = userMetadata.phone || null
+    let profileImageUrl = userMetadata.profile_image_url || null
+    
+    // Extract role from metadata, with appropriate fallbacks
+    let role = userMetadata.role || appMetadata.role || 'admin' // Default to admin for now
+    
+    // If no first/last name in metadata, try to find it in the students table
+    if (!firstName || !lastName) {
+      const { data: studentData } = await supabase
+        .from('students')
+        .select('first_name, last_name')
+        .eq('email', user.email)
+        .single()
+        
+      if (studentData) {
+        firstName = studentData.first_name
+        lastName = studentData.last_name
+        // Don't override the role if we already found it in metadata
+      }
     }
     
     return {
@@ -56,10 +65,11 @@ export default defineEventHandler(async (event) => {
       email: user.email,
       firstName,
       lastName,
+      phone,
+      profileImageUrl,
       role,
       isAuthenticated: true
     }
-    
   } catch (error: any) {
     console.error('Authentication error:', error)
     throw createError({

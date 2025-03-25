@@ -1,5 +1,6 @@
-import { ref, computed } from '#imports'
-import { useRouter } from '#app'
+import { ref, computed } from '#imports';
+import { useRouter } from '#app';
+import { useUserStore } from '~/stores/user';
 
 // Type definitions
 interface MenuItem {
@@ -16,11 +17,12 @@ interface SectionItem {
   items: MenuItem[];
 }
 
-type Role = 'admin' | 'teacher' | 'counselor';
+type Role = 'admin' | 'instructor' | 'staff' | 'receptionist' | 'guest';
 
 export function useNavigation() {
   const router = useRouter();
   const userRole = ref<Role>('admin');
+  const userStore = useUserStore();
 
   // Base menu items that will be used across roles
   const baseMenuItems: MenuItem[] = [
@@ -37,40 +39,40 @@ export function useNavigation() {
           {
             label: 'Student Management',
             items: [
-              { 
+              {
                 label: 'All Students',
                 icon: 'pi pi-list',
-                path: '/students' 
+                path: '/students'
               },
-              { 
+              {
                 label: 'Attendance',
                 icon: 'pi pi-calendar-check',
-                path: '/attendance' 
+                path: '/attendance'
               },
-              { 
+              {
                 label: 'Assessments',
                 icon: 'pi pi-chart-bar',
-                path: '/assessments' 
+                path: '/assessments'
               }
             ]
           },
           {
             label: 'Progress & Certifications',
             items: [
-              { 
+              {
                 label: 'Hours Tracking',
                 icon: 'pi pi-clock',
-                path: '/hours' 
+                path: '/hours'
               },
-              { 
+              {
                 label: 'Certifications',
                 icon: 'pi pi-verified',
-                path: '/certifications' 
+                path: '/certifications'
               },
-              { 
+              {
                 label: 'Documents',
                 icon: 'pi pi-file',
-                path: '/documents' 
+                path: '/documents'
               }
             ]
           }
@@ -90,13 +92,27 @@ export function useNavigation() {
       {
         label: 'Leads',
         icon: 'pi pi-flag',
-        path: '/leads'
+        items: [
+          [
+            {
+              label: 'Leads Management',
+              items: [
+                {
+                  label: 'All Leads',
+                  icon: 'pi pi-list',
+                  path: '/leads'
+                },
+                {
+                  label: 'Tasks',
+                  icon: 'pi pi-check-square',
+                  path: '/tasks'
+                }
+              ]
+            }
+          ]
+        ]
       },
-      {
-        label: 'Tasks',
-        icon: 'pi pi-check-square',
-        path: '/tasks'
-      },
+
       {
         label: 'Communications',
         icon: 'pi pi-envelope',
@@ -105,20 +121,20 @@ export function useNavigation() {
             {
               label: 'Communication Tools',
               items: [
-                { 
+                {
                   label: 'Email Templates',
                   icon: 'pi pi-file-edit',
-                  path: '/admin/templates' 
+                  path: '/admin/templates'
                 },
-                { 
+                {
                   label: 'Communication History',
                   icon: 'pi pi-history',
-                  path: '/communications/history' 
+                  path: '/communications/history'
                 },
-                { 
+                {
                   label: 'Bulk Messaging',
                   icon: 'pi pi-send',
-                  path: '/communications/bulk' 
+                  path: '/communications/bulk'
                 }
               ]
             }
@@ -128,7 +144,25 @@ export function useNavigation() {
       {
         label: 'Reports',
         icon: 'pi pi-chart-pie',
-        path: '/reports'
+        items: [
+          [
+            {
+              label: 'Reporting',
+              items: [
+                {
+                  label: 'Standard Reports',
+                  icon: 'pi pi-file-pdf',
+                  path: '/reports'
+                },
+                {
+                  label: 'Analytics Dashboard',
+                  icon: 'pi pi-chart-line',
+                  path: '/analytics'
+                }
+              ]
+            }
+          ]
+        ]
       },
       {
         label: 'Administration',
@@ -138,15 +172,15 @@ export function useNavigation() {
             {
               label: 'School Settings',
               items: [
-                { 
+                {
                   label: 'User Management',
                   icon: 'pi pi-users',
-                  path: '/admin/users' 
+                  path: '/admin/users'
                 },
-                { 
+                {
                   label: 'System Settings',
                   icon: 'pi pi-cog',
-                  path: '/admin/settings' 
+                  path: '/admin/settings'
                 }
               ]
             }
@@ -154,7 +188,7 @@ export function useNavigation() {
         ]
       }
     ],
-    teacher: [
+    instructor: [
       {
         label: 'Tasks',
         icon: 'pi pi-check-square',
@@ -168,10 +202,10 @@ export function useNavigation() {
             {
               label: 'Communication Tools',
               items: [
-                { 
+                {
                   label: 'Communication History',
                   icon: 'pi pi-history',
-                  path: '/communications/history' 
+                  path: '/communications/history'
                 }
               ]
             }
@@ -179,7 +213,7 @@ export function useNavigation() {
         ]
       }
     ],
-    counselor: [
+    staff: [
       {
         label: 'Leads',
         icon: 'pi pi-flag',
@@ -198,15 +232,15 @@ export function useNavigation() {
             {
               label: 'Communication Tools',
               items: [
-                { 
+                {
                   label: 'Communication History',
                   icon: 'pi pi-history',
-                  path: '/communications/history' 
+                  path: '/communications/history'
                 },
-                { 
+                {
                   label: 'Bulk Messaging',
                   icon: 'pi pi-send',
-                  path: '/communications/bulk' 
+                  path: '/communications/bulk'
                 }
               ]
             }
@@ -218,7 +252,8 @@ export function useNavigation() {
         icon: 'pi pi-chart-pie',
         path: '/reports/counselor'
       }
-    ]
+    ],
+    guest: []
   };
 
   /**
@@ -227,12 +262,12 @@ export function useNavigation() {
   const navigationItems = computed<MenuItem[]>(() => {
     // Combine base items with role-specific items
     const items = [...baseMenuItems];
-    
+
     // Add role-specific items
     if (roleSpecificMenuItems[userRole.value]) {
       items.push(...roleSpecificMenuItems[userRole.value]);
     }
-    
+
     // Add command functions to each item
     return addCommandsToItems(items);
   });
@@ -242,17 +277,17 @@ export function useNavigation() {
    */
   const accessibleRoutes = computed<string[]>(() => {
     const paths: string[] = [];
-    
+
     // Extract all paths from the navigation structure
     function extractPaths(itemsArray: MenuItem[]) {
-      itemsArray.forEach(item => {
+      itemsArray.forEach((item) => {
         if (item.path) {
           paths.push(item.path);
         }
-        
+
         if (item.items) {
-          item.items.forEach(group => {
-            group.forEach(section => {
+          item.items.forEach((group) => {
+            group.forEach((section) => {
               if (section.items) {
                 extractPaths(section.items);
               }
@@ -261,7 +296,7 @@ export function useNavigation() {
         }
       });
     }
-    
+
     extractPaths(navigationItems.value);
     return paths;
   });
@@ -279,7 +314,8 @@ export function useNavigation() {
    */
   const setRole = (role: Role): void => {
     if (roleSpecificMenuItems[role]) {
-      userRole.value = role;
+      // Instead of setting the local ref, use the store
+      userStore.setDemoRole(role);
     } else {
       console.warn(`Role "${role}" not found in navigation config`);
     }
@@ -300,23 +336,23 @@ export function useNavigation() {
    * @returns {MenuItem[]} Menu items with command functions
    */
   function addCommandsToItems(items: MenuItem[]): MenuItem[] {
-    return items.map(item => {
+    return items.map((item) => {
       const newItem = { ...item };
-      
+
       // Add command function if item has a path
       if (newItem.path) {
         newItem.command = () => {
           router.push(newItem.path as string);
         };
       }
-      
+
       // Process nested items
       if (newItem.items) {
-        newItem.items = newItem.items.map(group => {
-          return group.map(section => {
+        newItem.items = newItem.items.map((group) => {
+          return group.map((section) => {
             return {
               ...section,
-              items: section.items.map(subItem => {
+              items: section.items.map((subItem) => {
                 if (subItem.path) {
                   return {
                     ...subItem,
@@ -331,7 +367,7 @@ export function useNavigation() {
           });
         });
       }
-      
+
       return newItem;
     });
   }
@@ -343,8 +379,8 @@ export function useNavigation() {
    */
   function convertToMobileMenu(items: MenuItem[]): MenuItem[] {
     const mobileItems: MenuItem[] = [];
-    
-    items.forEach(item => {
+
+    items.forEach((item) => {
       if (!item.items) {
         // Simple menu item
         mobileItems.push({
@@ -355,12 +391,12 @@ export function useNavigation() {
       } else {
         // Item with submenu
         const subItems: MenuItem[] = [];
-        
+
         // Process each group and section
-        item.items.forEach(group => {
-          group.forEach(section => {
+        item.items.forEach((group) => {
+          group.forEach((section) => {
             // Add section items
-            section.items.forEach(subItem => {
+            section.items.forEach((subItem) => {
               subItems.push({
                 label: subItem.label,
                 icon: subItem.icon,
@@ -369,7 +405,7 @@ export function useNavigation() {
             });
           });
         });
-        
+
         // Add the parent with children
         mobileItems.push({
           label: item.label,
@@ -378,7 +414,7 @@ export function useNavigation() {
         });
       }
     });
-    
+
     return mobileItems;
   }
 

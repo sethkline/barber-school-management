@@ -67,6 +67,7 @@
         <!-- Right side items -->
         <div class="flex items-center">
           <!-- User Menu -->
+          <!-- <NavigationAvatar /> -->
           <div class="relative">
             <Button
               icon="pi pi-user"

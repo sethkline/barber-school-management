@@ -5,6 +5,8 @@ interface UserState {
   email: string | null
   firstName: string | null
   lastName: string | null
+  phone: string | null
+  profileImageUrl: string | null
   role: string | null
   isAuthenticated: boolean
   isLoading?: boolean
@@ -17,6 +19,8 @@ export const useUserStore = defineStore('user', {
     email: null,
     firstName: null,
     lastName: null,
+    phone: null,
+    profileImageUrl: null,
     role: null,
     isAuthenticated: false,
     isLoading: false,

@@ -1,3 +1,3 @@
 <template>
-  <ReportingSystem/>
+  <ProfilePage />
 </template>

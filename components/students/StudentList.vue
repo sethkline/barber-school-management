@@ -61,8 +61,14 @@
           <div class="flex justify-between items-center">
             <div>
               <span class="p-input-icon-left">
-                <i class="pi pi-search" />
-                <InputText v-model="filters.global.value" placeholder="Search students..." class="p-inputtext-sm" />
+                <IconField>
+                  <InputIcon>
+                    <i class="pi pi-search" />
+                  </InputIcon>
+                  <InputText
+                    v-model="filters.global.value" placeholder="Search students..." class="p-inputtext-sm"
+                  />
+                </IconField>
               </span>
             </div>
             <div>

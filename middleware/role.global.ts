@@ -9,6 +9,12 @@ export default defineNuxtRouteMiddleware((to) => {
     return
   }
 
+    // Additional accessible routes for all authenticated users
+    const commonRoutes = ['/profile']
+    if (commonRoutes.includes(to.path)) {
+      return
+    }
+
   // Only run on client-side
   if (process.server) {
     return
