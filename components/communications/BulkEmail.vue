@@ -16,7 +16,7 @@
               </h3>
               
               <div class="mt-2">
-                <BulkEmailForm 
+                <CommunciationsBulkEmailForm 
                   :recipients="recipients"
                   :recipient-type="recipientType"
                   @sent="onSent"

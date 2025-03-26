@@ -33,6 +33,8 @@ export default defineEventHandler(async (event: H3Event) => {
     // Extract first name and last name from metadata if available
     const firstName = userMetadata.first_name || ''
     const lastName = userMetadata.last_name || ''
+
+    const isActive = userMetadata.is_active !== false; 
     
     // Return user information with properly extracted role
     return {
@@ -41,8 +43,8 @@ export default defineEventHandler(async (event: H3Event) => {
         email: result.user.email,
         firstName: firstName,
         lastName: lastName,
-        // Look for role in user_metadata first, then app_metadata, with a fallback to 'user'
-        role: userMetadata.role || appMetadata.role || 'admin' // Default to admin for now
+        role: userMetadata.role || appMetadata.role || 'admin',
+        is_active: isActive
       }
     }
   } catch (error: any) {

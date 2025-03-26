@@ -1,4 +1,3 @@
-// server/services/authService.ts
 import { getSupabaseClient } from '~/server/utils/supabaseClient'
 
 export const authService = {

@@ -54,7 +54,7 @@
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
               <div class="flex justify-end space-x-2">
-                <NuxtLink :to="`/admin/templates/${template.id}`" class="text-blue-600 hover:text-blue-900">
+                <NuxtLink :to="`/admin/templates/edit/${template.id}`" class="text-blue-600 hover:text-blue-900">
                   Edit
                 </NuxtLink>
                 <button @click="confirmDelete(template)" class="text-red-600 hover:text-red-900">

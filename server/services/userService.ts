@@ -72,6 +72,7 @@ export const userService = {
       // Map auth user data to our User interface
       // Assuming user metadata contains our additional fields
       const metadata = user.user_metadata || {}
+      const userdata = user.user_metadata || {}
       
       return {
         id: user.id,
@@ -79,7 +80,7 @@ export const userService = {
         first_name: metadata.first_name || '',
         last_name: metadata.last_name || '',
         role: (metadata.role || 'staff') as UserRole,
-        is_active: user.banned === false,
+        is_active: userdata.is_active || false,
         created_at: user.created_at,
         last_login: user.last_sign_in_at,
         phone: metadata.phone,

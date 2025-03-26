@@ -18,7 +18,7 @@ export async function checkAdminRole(event: H3Event) {
   // Check if user has admin role
   const metadata = user.app_metadata || {}
   
-  if (metadata.role !== 'admin') {
+  if ( metadata.role !== 'admin') {
     throw createError({
       statusCode: 403,
       statusMessage: 'Insufficient permissions'

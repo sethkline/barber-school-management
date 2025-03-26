@@ -98,12 +98,13 @@
 
       <Column field="lead" header="Related Lead" style="width: 14rem">
         <template #body="{ data }">
-          <div v-if="data.lead">
+          <div v-if="data.lead_id">
             <Button
-              :label="`${data.lead.first_name} ${data.lead.last_name}`"
+              :label="getLeadName(data.lead_id)"
               link
-              @click="router.push(`/leads/${data.lead_id}`)"
             />
+            <!-- @click="router.push(`/leads/${data.lead_id}`)" TODO add this when have more detailed lead page -->
+
           </div>
           <div v-else class="text-sm text-gray-500">No lead</div>
         </template>
@@ -139,65 +140,128 @@
       :visible="showNewTaskModal || showEditTaskModal"
       :header="showEditTaskModal ? 'Edit Task' : 'Add New Task'"
       :modal="true"
-      :style="{ width: '30rem' }"
+      :style="{ width: '40rem' }"
       :closeOnEscape="false"
       @update:visible="(value) => handleDialogVisibility(value)"
     >
-      <form @submit.prevent="saveTask" class="p-fluid">
-        <div class="field">
-          <label for="description" class="font-medium">Description *</label>
-          <InputText
-            id="description"
-            v-model="taskForm.description"
-            required
-            placeholder="Task description"
-            autocomplete="off"
+      <form @submit.prevent="saveTask" class="p-4">
+        <!-- Task Details Section -->
+        <div class="mb-6">
+          <h3 class="text-lg font-semibold mb-4 text-gray-700 border-b pb-2">Task Details</h3>
+
+          <div class="grid grid-cols-1 gap-4">
+            <div class="field">
+              <label for="description" class="block text-sm font-medium text-gray-700 mb-1">Description *</label>
+              <InputText
+                id="description"
+                v-model="taskForm.description"
+                required
+                placeholder="Task description"
+                autocomplete="off"
+                class="w-full"
+              />
+            </div>
+
+            <div class="field" v-if="!editingTaskId">
+              <label for="lead_id" class="block text-sm font-medium text-gray-700 mb-1">Related Lead</label>
+              <Dropdown
+                id="lead_id"
+                v-model="taskForm.lead_id"
+                :options="leads"
+                optionLabel="display_name"
+                optionValue="id"
+                placeholder="Select a lead"
+                :filter="true"
+                filterPlaceholder="Search lead"
+                class="w-full"
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- Assignment Section -->
+        <div class="mb-6">
+          <h3 class="text-lg font-semibold mb-4 text-gray-700 border-b pb-2">Schedule & Assignment</h3>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="field">
+              <label for="due_date" class="block text-sm font-medium text-gray-700 mb-1">Due Date</label>
+              <Calendar
+                id="due_date"
+                v-model="taskFormDate"
+                dateFormat="yy-mm-dd"
+                showIcon
+                class="w-full"
+                placeholder="Select due date"
+              />
+            </div>
+
+            <div class="field">
+              <label for="assigned_to" class="block text-sm font-medium text-gray-700 mb-1">Assigned To</label>
+              <InputText
+                id="assigned_to"
+                v-model="taskForm.assigned_to"
+                placeholder="Name of assignee"
+                autocomplete="off"
+                class="w-full"
+              />
+            </div>
+
+            <div class="field md:col-span-2">
+              <label for="status" class="block text-sm font-medium text-gray-700 mb-1">Status</label>
+              <Dropdown
+                id="status"
+                v-model="taskForm.status"
+                :options="taskStatusOptions"
+                optionLabel="label"
+                optionValue="value"
+                class="w-full"
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- Priority Section (New) -->
+        <!-- <div class="mb-6">
+          <h3 class="text-lg font-semibold mb-4 text-gray-700 border-b pb-2">Priority & Reminders</h3>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="field">
+              <label for="priority" class="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+              <Dropdown
+                id="priority"
+                v-model="taskForm.priority"
+                :options="[
+                  { label: 'High', value: 'high' },
+                  { label: 'Medium', value: 'medium' },
+                  { label: 'Low', value: 'low' }
+                ]"
+                optionLabel="label"
+                optionValue="value"
+                placeholder="Select priority"
+                class="w-full"
+              />
+            </div>
+
+            <div class="field">
+              <label for="send_reminder" class="block text-sm font-medium text-gray-700 mb-1">Reminder</label>
+              <div class="flex items-center bg-gray-50 p-2 rounded h-10">
+                <Checkbox id="send_reminder" v-model="taskForm.send_reminder" :binary="true" />
+                <label for="send_reminder" class="ml-2 text-sm text-gray-700"> Send email reminder </label>
+              </div>
+            </div>
+          </div>
+        </div> -->
+
+        <!-- Action Buttons -->
+        <div class="flex justify-end gap-3 mt-6 border-t pt-4">
+          <Button label="Cancel" @click="cancelTaskModal" text class="px-4 py-2 text-gray-700 hover:text-gray-900" />
+          <Button
+            :label="showEditTaskModal ? 'Update Task' : 'Add Task'"
+            type="submit"
+            severity="primary"
+            class="px-4 py-2"
           />
-        </div>
-
-        <div class="field" v-if="!editingTaskId">
-          <label for="lead_id" class="font-medium">Related Lead</label>
-          <Dropdown
-            id="lead_id"
-            v-model="taskForm.lead_id"
-            :options="leads"
-            optionLabel="display_name"
-            optionValue="id"
-            placeholder="Select a lead"
-            :filter="true"
-            filterPlaceholder="Search lead"
-          />
-        </div>
-
-        <div class="field">
-          <label for="due_date" class="font-medium">Due Date</label>
-          <Calendar id="due_date" v-model="taskFormDate" dateFormat="yy-mm-dd" showIcon />
-        </div>
-
-        <div class="field">
-          <label for="assigned_to" class="font-medium">Assigned To</label>
-          <InputText
-            id="assigned_to"
-            v-model="taskForm.assigned_to"
-            placeholder="Name of assignee"
-            autocomplete="off"
-          />
-        </div>
-
-        <div class="field">
-          <label for="status" class="font-medium">Status</label>
-          <Dropdown
-            id="status"
-            v-model="taskForm.status"
-            :options="taskStatusOptions"
-            optionLabel="label"
-            optionValue="value"
-          />
-        </div>
-
-        <div class="flex justify-end gap-2 mt-4">
-          <Button label="Cancel" @click="cancelTaskModal" text />
-          <Button :label="showEditTaskModal ? 'Update Task' : 'Add Task'" type="submit" severity="primary" />
         </div>
       </form>
     </Dialog>
@@ -389,6 +453,7 @@ async function fetchLeads() {
     }
 
     const data = await response.json();
+    console.log(data, 'data');
     // Add display_name property for dropdown
     leads.value = data.leads.map((lead: Lead) => ({
       ...lead,
@@ -403,6 +468,15 @@ async function fetchLeads() {
       life: 3000
     });
   }
+}
+
+const getLeadName = (leadId: string):string => {
+  const leadInfo = leads.value.find((lead) => lead.id === leadId)
+  console.log(leadInfo, 'leadInfo');
+  if (leadInfo?.first_name && leadInfo?.last_name) {
+    return `${leadInfo.first_name} ${leadInfo.last_name}`
+  }
+  return '';
 }
 
 // Fetch tasks from the API
@@ -503,12 +577,17 @@ async function saveTask() {
         throw new Error('Failed to update task');
       }
 
-      // Update the task in the local list
+      showEditTaskModal.value = false;
+      
+      // Then update the local data
       const updatedTask = await response.json();
       const index = tasks.value.findIndex((t) => t.id === editingTaskId.value);
       if (index !== -1) {
         tasks.value[index] = updatedTask.task;
       }
+
+      // Reset the form
+      resetTaskForm();
 
       toast.add({
         severity: 'success',
@@ -530,6 +609,12 @@ async function saveTask() {
         throw new Error('Failed to create task');
       }
 
+      // Close the modal FIRST
+      showNewTaskModal.value = false;
+      
+      // Reset the form
+      resetTaskForm();
+      
       // Refresh the task list
       fetchTasks(1);
 
@@ -540,9 +625,6 @@ async function saveTask() {
         life: 3000
       });
     }
-
-    // Close the modal and reset the form
-    cancelTaskModal();
   } catch (error) {
     console.error('Error saving task:', error);
     toast.add({
