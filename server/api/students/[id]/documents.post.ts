@@ -1,16 +1,53 @@
 // server/api/students/[id]/documents.post.ts
-import { H3Event } from 'h3'
-import { studentService } from '~/server/services/studentService'
+import { documentService } from '~/server/services/documentService'
 
-export default defineEventHandler(async (event: H3Event) => {
+export default defineEventHandler(async (event) => {
+  const studentId = getRouterParam(event, 'id')
+
+  if (!studentId) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Student ID is required',
+    })
+  }
+
   try {
-    const studentId = event.context.params?.id
-    const formData = await readBody(event)
-    return await studentService.uploadStudentDocument(studentId as string, formData)
+    const formData = await readMultipartFormData(event)
+
+    if (!formData || formData.length === 0) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'No file provided',
+      })
+    }
+
+    const file = formData[0]
+    const fileName = file.filename || 'document'
+    const fileType = file.type || 'application/octet-stream'
+    const fileData = file.data
+    const fileSize = fileData.length
+
+    // Get user from context (set by auth middleware)
+    const uploadedBy = event.context.user?.id || 'system'
+
+    const document = await documentService.uploadDocument(
+      studentId,
+      fileData,
+      fileName,
+      fileType,
+      fileSize,
+      uploadedBy
+    )
+
+    return {
+      success: true,
+      document,
+    }
   } catch (error: any) {
-    return createError({
-      statusCode: error.statusCode || 500,
-      statusMessage: error.message
+    console.error('Document upload error:', error)
+    throw createError({
+      statusCode: 500,
+      statusMessage: error.message || 'Failed to upload document',
     })
   }
 })

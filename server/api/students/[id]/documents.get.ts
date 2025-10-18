@@ -1,15 +1,24 @@
 // server/api/students/[id]/documents.get.ts
-import { H3Event } from 'h3'
-import { studentService } from '~/server/services/studentService'
+import { documentService } from '~/server/services/documentService'
 
-export default defineEventHandler(async (event: H3Event) => {
+export default defineEventHandler(async (event) => {
+  const studentId = getRouterParam(event, 'id')
+
+  if (!studentId) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Student ID is required',
+    })
+  }
+
   try {
-    const studentId = event.context.params?.id
-    return await studentService.listStudentDocuments(studentId as string)
+    const documents = await documentService.getDocumentsByStudentId(studentId)
+    return documents
   } catch (error: any) {
-    return createError({
-      statusCode: error.statusCode || 500,
-      statusMessage: error.message
+    console.error('Error fetching documents:', error)
+    throw createError({
+      statusCode: 500,
+      statusMessage: error.message || 'Failed to fetch documents',
     })
   }
 })

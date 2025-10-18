@@ -1,8 +1,7 @@
-// server/api/students/[id]/[documentId].delete.ts
 import { documentService } from '~/server/services/documentService'
 
 export default defineEventHandler(async (event) => {
-  const documentId = getRouterParam(event, 'documentId')
+  const documentId = getRouterParam(event, 'id')
 
   if (!documentId) {
     throw createError({
@@ -12,17 +11,17 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    await documentService.deleteDocument(documentId)
+    const downloadUrl = await documentService.getDocumentDownloadUrl(documentId)
 
     return {
       success: true,
-      message: 'Document deleted successfully',
+      url: downloadUrl,
     }
   } catch (error: any) {
-    console.error('Document deletion error:', error)
+    console.error('Document download error:', error)
     throw createError({
       statusCode: 500,
-      statusMessage: error.message || 'Failed to delete document',
+      statusMessage: error.message || 'Failed to get download URL',
     })
   }
 })

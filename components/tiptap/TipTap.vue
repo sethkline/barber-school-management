@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { Highlight } from '@tiptap/extension-highlight'
 import { TextAlign } from '@tiptap/extension-text-align'
 import { StarterKit } from '@tiptap/starter-kit'

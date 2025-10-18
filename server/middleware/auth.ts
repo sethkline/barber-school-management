@@ -1,6 +1,12 @@
 import { createClient } from '@supabase/supabase-js'
 
 export default defineEventHandler(async (event) => {
+  // Skip auth for public routes
+  const path = event.path || ''
+  if (path.startsWith('/api/public/')) {
+    return
+  }
+
   const accessToken = getCookie(event, 'access_token')
   
   if (accessToken) {

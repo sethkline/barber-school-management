@@ -157,12 +157,13 @@
                   severity="info" 
                   aria-label="View" 
                 />
-                <Button 
-                  icon="pi pi-download" 
-                  text 
-                  rounded 
-                  severity="success" 
-                  aria-label="Download" 
+                <Button
+                  icon="pi pi-download"
+                  @click="handleDownload(slotProps.data.id)"
+                  text
+                  rounded
+                  severity="success"
+                  aria-label="Download"
                 />
                 <Button 
                   icon="pi pi-trash" 
@@ -398,81 +399,20 @@
 import { ref, computed, onMounted } from 'vue';
 import { useToast } from 'primevue/usetoast';
 import { useConfirm } from 'primevue/useconfirm';
+import { useRoute } from 'vue-router';
 
+// Props
+const props = defineProps<{
+  studentId?: string
+}>();
+
+const route = useRoute();
 
 // Reactive state
-const documents = ref([
-  {
-    id: 'doc-001',
-    document_name: 'Enrollment Agreement',
-    file_url: '#',
-    uploaded_at: '2023-08-20T09:15:00Z',
-    expiration_date: null,
-    document_type: 'Agreement',
-    file_size: '245 KB',
-    file_type: 'PDF'
-  },
-  {
-    id: 'doc-002',
-    document_name: 'Health Insurance Card',
-    file_url: '#',
-    uploaded_at: '2023-08-22T14:30:00Z',
-    expiration_date: '2024-12-31',
-    document_type: 'Insurance',
-    file_size: '128 KB',
-    file_type: 'JPG'
-  },
-  {
-    id: 'doc-003',
-    document_name: 'COVID-19 Vaccination Record',
-    file_url: '#',
-    uploaded_at: '2023-09-05T10:20:00Z',
-    expiration_date: null,
-    document_type: 'Medical',
-    file_size: '312 KB',
-    file_type: 'PDF'
-  },
-  {
-    id: 'doc-004',
-    document_name: 'Student ID Photo',
-    file_url: '#',
-    uploaded_at: '2023-08-15T11:45:00Z',
-    expiration_date: null,
-    document_type: 'Identification',
-    file_size: '526 KB',
-    file_type: 'PNG'
-  },
-  {
-    id: 'doc-005',
-    document_name: 'Driver\'s License',
-    file_url: '#',
-    uploaded_at: '2023-10-12T15:30:00Z',
-    expiration_date: '2027-10-12',
-    document_type: 'Identification',
-    file_size: '412 KB',
-    file_type: 'JPG'
-  },
-  {
-    id: 'doc-006',
-    document_name: 'Financial Aid Application',
-    file_url: '#',
-    uploaded_at: '2023-07-28T09:10:00Z',
-    expiration_date: '2024-07-28',
-    document_type: 'Financial',
-    file_size: '634 KB',
-    file_type: 'PDF'
-  }
-]);
+const documents = ref<any[]>([]);
 
-// Mock student data
-const student = ref({
-  id: '123e4567-e89b-12d3-a456-426614174000',
-  first_name: 'Jane',
-  last_name: 'Smith',
-  email: 'jane.smith@example.com',
-  enrollment_date: '2023-09-01',
-  status: 'current'
-});
+// Student data
+const student = ref<any>(null);
 
 // UI State
 const loading = ref(false);
@@ -696,33 +636,35 @@ function clearFile() {
   uploadError.value = '';
 }
 
-function handleUpload() {
+async function handleUpload() {
   submitted.value = true;
-  
+
   // Validate form
   if (!uploadFormData.value.document_name || !uploadFormData.value.file) {
     return;
   }
-  
+
   uploading.value = true;
-  
-  // Simulate upload delay
-  setTimeout(() => {
-    // Create a new document with mock data
-    const newDocument = {
-      id: `doc-${Date.now()}`,
-      document_name: uploadFormData.value.document_name,
-      document_type: uploadFormData.value.document_type || 'Other',
-      file_url: '#',
-      uploaded_at: new Date().toISOString(),
-      expiration_date: uploadFormData.value.expiration_date ? new Date(uploadFormData.value.expiration_date).toISOString() : null,
-      file_size: formatFileSize(uploadFormData.value?.file?.size || 0),
-      file_type: uploadFormData.value.file.name.split('.').pop().toUpperCase()
-    };
-    
-    // Add to documents list
-    documents.value = [newDocument, ...documents.value];
-    
+  uploadError.value = '';
+
+  try {
+    const formData = new FormData();
+    formData.append('file', uploadFormData.value.file);
+    formData.append('document_name', uploadFormData.value.document_name);
+    formData.append('document_type', uploadFormData.value.document_type || 'Other');
+    if (uploadFormData.value.expiration_date) {
+      formData.append('expiration_date', uploadFormData.value.expiration_date.toISOString());
+    }
+
+    const studentId = props.studentId || route.params.id;
+    await $fetch(`/api/students/${studentId}/documents`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    // Refresh documents list
+    await fetchDocuments();
+
     // Reset form and close modal
     uploadFormData.value = {
       document_name: '',
@@ -731,41 +673,64 @@ function handleUpload() {
       file: null
     };
     submitted.value = false;
-    uploadError.value = '';
     showUploadModal.value = false;
-    uploading.value = false;
-    
+
     // Show success message
     toast.add({
       severity: 'success',
       summary: 'Document Uploaded',
-      detail: 'The document was uploaded successfully',
+      detail: 'The document was uploaded successfully to S3',
       life: 3000
     });
-  }, 1500);
+  } catch (error: any) {
+    console.error('Upload error:', error);
+    uploadError.value = error.data?.message || 'Failed to upload document';
+    toast.add({
+      severity: 'error',
+      summary: 'Upload Failed',
+      detail: uploadError.value,
+      life: 5000
+    });
+  } finally {
+    uploading.value = false;
+  }
 }
 
-function handleDelete(docId) {
+async function handleDelete(docId: string) {
   confirm.require({
-    message: 'Are you sure you want to delete this document?',
+    message: 'Are you sure you want to delete this document? This will also delete it from S3.',
     header: 'Confirm Deletion',
     icon: 'pi pi-exclamation-triangle',
     acceptClass: 'p-button-danger',
-    accept: () => {
+    accept: async () => {
       loading.value = true;
-      
-      // Simulate deletion delay
-      setTimeout(() => {
-        documents.value = documents.value.filter(doc => doc.id !== docId);
-        loading.value = false;
-        
+
+      try {
+        const studentId = props.studentId || route.params.id;
+        await $fetch(`/api/students/${studentId}/${docId}`, {
+          method: 'DELETE',
+        });
+
+        // Refresh documents list
+        await fetchDocuments();
+
         toast.add({
           severity: 'success',
           summary: 'Document Deleted',
-          detail: 'The document has been deleted successfully',
+          detail: 'The document has been deleted from S3 successfully',
           life: 3000
         });
-      }, 800);
+      } catch (error: any) {
+        console.error('Delete error:', error);
+        toast.add({
+          severity: 'error',
+          summary: 'Delete Failed',
+          detail: error.data?.message || 'Failed to delete document',
+          life: 5000
+        });
+      } finally {
+        loading.value = false;
+      }
     }
   });
 }
@@ -803,8 +768,60 @@ function openPreview(doc) {
   showPreviewModal.value = true;
 }
 
+async function handleDownload(documentId: string) {
+  try {
+    const response = await $fetch(`/api/documents/${documentId}/download`);
+    // Open download URL in new tab
+    if (response.url) {
+      window.open(response.url, '_blank');
+    }
+  } catch (error: any) {
+    console.error('Download error:', error);
+    toast.add({
+      severity: 'error',
+      summary: 'Download Failed',
+      detail: error.data?.message || 'Failed to get download URL',
+      life: 5000
+    });
+  }
+}
+
+async function fetchDocuments() {
+  try {
+    loading.value = true;
+    const studentId = props.studentId || route.params.id;
+    const data = await $fetch(`/api/students/${studentId}/documents`);
+    documents.value = data.map((doc: any) => ({
+      ...doc,
+      file_size: formatFileSize(doc.file_size || 0),
+      file_type: doc.document_type || 'Unknown',
+    }));
+  } catch (error: any) {
+    console.error('Failed to fetch documents:', error);
+    toast.add({
+      severity: 'error',
+      summary: 'Error',
+      detail: 'Failed to load documents',
+      life: 5000
+    });
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function fetchStudent() {
+  try {
+    const studentId = props.studentId || route.params.id;
+    const data = await $fetch(`/api/students/${studentId}`);
+    student.value = data;
+  } catch (error: any) {
+    console.error('Failed to fetch student:', error);
+  }
+}
+
 // Lifecycle hooks
-onMounted(() => {
+onMounted(async () => {
+  await Promise.all([fetchStudent(), fetchDocuments()]);
   // Check for expired documents and show notification
   const expiredCount = documents.value.filter(doc => isExpired(doc.expiration_date)).length;
   const expiringCount = documents.value.filter(doc => !isExpired(doc.expiration_date) && willExpireSoon(doc.expiration_date)).length;
