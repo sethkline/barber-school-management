@@ -190,15 +190,15 @@ module "ecs" {
   ses_domain_identity_arn = var.domain_name != "" ? module.dns[0].ses_domain_identity_arn : ""
 
   environment_variables = {
-    NODE_ENV             = "production"
-    AWS_REGION           = var.aws_region
-    AWS_S3_BUCKET        = module.s3.bucket_name
-    COGNITO_USER_POOL_ID = module.cognito.user_pool_id
-    COGNITO_CLIENT_ID    = module.cognito.client_id
-    COGNITO_ISSUER_URL   = module.cognito.issuer_url
-    SNS_TOPIC_ARN        = module.sns.topic_arn
-    SES_FROM_EMAIL       = var.ses_from_email
-    APP_URL              = var.domain_name != "" ? "https://${var.domain_name}" : "http://${module.alb.alb_dns_name}"
+    NODE_ENV                  = "production"
+    NUXT_AWS_REGION           = var.aws_region
+    NUXT_AWS_S3_BUCKET        = module.s3.bucket_name
+    NUXT_COGNITO_USER_POOL_ID = module.cognito.user_pool_id
+    NUXT_COGNITO_CLIENT_ID    = module.cognito.client_id
+    NUXT_COGNITO_ISSUER_URL   = module.cognito.issuer_url
+    NUXT_SNS_TOPIC_ARN        = module.sns.topic_arn
+    NUXT_SES_FROM_EMAIL       = var.ses_from_email
+    NUXT_APP_URL              = var.domain_name != "" ? "https://${var.domain_name}" : "http://${module.alb.alb_dns_name}"
   }
 
   depends_on = [module.alb, module.secrets, module.s3, module.sns]

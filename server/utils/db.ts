@@ -14,17 +14,18 @@ export function getDb() {
   }
 
   const config = useRuntimeConfig()
-  const databaseUrl = config.databaseUrl
+  const databaseUrl = config.databaseUrl || process.env.DATABASE_URL
 
   if (!databaseUrl) {
     throw new Error('DATABASE_URL environment variable is not set')
   }
 
   pool = new Pool({
-    connectionString: databaseUrl,
+    connectionString: databaseUrl as string,
     max: 10,
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 2000
+    connectionTimeoutMillis: 2000,
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
   })
 
   db = drizzle(pool, { schema })

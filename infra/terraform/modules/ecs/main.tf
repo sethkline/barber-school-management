@@ -360,11 +360,11 @@ resource "aws_ecs_task_definition" "main" {
 
       secrets = [
         {
-          name      = "DATABASE_URL"
+          name      = "NUXT_DATABASE_URL"
           valueFrom = "${var.secrets_arn}:DATABASE_URL::"
         },
         {
-          name      = "COGNITO_CLIENT_SECRET"
+          name      = "NUXT_COGNITO_CLIENT_SECRET"
           valueFrom = "${var.secrets_arn}:COGNITO_CLIENT_SECRET::"
         }
       ]
