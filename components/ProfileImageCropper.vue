@@ -32,7 +32,6 @@
 import { ref, computed, watch } from 'vue';
 import { Cropper, CircleStencil } from 'vue-advanced-cropper';
 import 'vue-advanced-cropper/dist/style.css';
-import { useSupabaseClient } from '#imports';
 import Dialog from 'primevue/dialog';
 import Button from 'primevue/button';
 
@@ -52,16 +51,11 @@ const props = defineProps({
   title: {
     type: String,
     default: 'Crop Profile Image'
-  },
-  bucketName: {
-    type: String,
-    default: 'profile-images'
   }
 });
 
 const emit = defineEmits(['update:modelValue', 'upload-success', 'upload-error']);
 
-const supabase = useSupabaseClient();
 const cropperRef = ref(null);
 const coordinates = ref(null);
 const uploading = ref(false);
@@ -127,37 +121,21 @@ async function cropAndUpload() {
     const fileName = `profile-${Date.now()}.jpg`;
     const file = new File([blob], fileName, { type: 'image/jpeg' });
 
-    // Upload the file to Supabase Storage
-    const filePath = `${props.userId}/profile.jpg`;
-    const { data, error } = await supabase.storage.from(props.bucketName).upload(filePath, file, {
-      upsert: true,
-      contentType: 'image/jpeg'
-    });
+    // Upload via server API endpoint (handles S3 upload and Cognito metadata update)
+    const formData = new FormData();
+    formData.append('file', file);
 
-    if (error) throw error;
-
-    // Get the private URL of the uploaded image
-    const { data: signedUrlData, error: signUrlError } = await supabase.storage
-      .from(props.bucketName)
-      .createSignedUrl(filePath, 60 * 60 * 24 * 7); // 7 days
-
-    if (signUrlError) throw signUrlError;
-    const imageUrl = signedUrlData.signedUrl;
-
-    // Update user metadata through API endpoint instead of direct auth call
-    const response = await $fetch('/api/user/profile-image', {
-      method: 'PUT',
-      body: {
-        imageUrl: imageUrl
-      }
+    const response = await $fetch('/api/user/profile-image-upload', {
+      method: 'POST',
+      body: formData
     });
 
     if (!response.success) {
-      throw new Error(response.message || 'Failed to update profile image');
+      throw new Error('Failed to upload profile image');
     }
 
     // Emit success event with the image URL
-    emit('upload-success', imageUrl);
+    emit('upload-success', response.imageUrl);
 
     // Close the dialog
     visible.value = false;

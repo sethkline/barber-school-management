@@ -84,12 +84,10 @@
 import { ref, computed, onMounted } from 'vue';
 import { useUserStore } from '~/stores/user';
 import { useToast } from 'primevue/usetoast';
-import { useSupabaseClient } from '#imports';
 import ProfileImageCropper from '~/components/ProfileImageCropper.vue';
 
 const userStore = useUserStore();
 const toast = useToast();
-const supabase = useSupabaseClient();
 const saving = ref(false);
 const profilePhotoUrl = ref('');
 const fileInput = ref(null);
@@ -143,19 +141,19 @@ onMounted(() => {
   }
 });
 
-// Fetch profile image from Supabase storage (fallback method)
+// Fetch profile image from auth endpoint (fallback method)
 async function fetchProfileImage() {
   try {
     // If we have user ID, try to get their profile image
     if (userStore.id) {
-      const { data: userData } = await supabase.auth.getUser();
-      
-      if (userData?.user?.user_metadata?.profile_image_url) {
-        profilePhotoUrl.value = userData.user.user_metadata.profile_image_url;
-        
+      const userData = await $fetch('/api/auth/me');
+
+      if (userData?.profileImageUrl) {
+        profilePhotoUrl.value = userData.profileImageUrl;
+
         // Also update the store so it's available next time
         userStore.setUser({
-          profileImageUrl: userData.user.user_metadata.profile_image_url
+          profileImageUrl: userData.profileImageUrl
         });
       }
     }

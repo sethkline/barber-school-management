@@ -1,14 +1,23 @@
 <script setup lang="ts">
-const user = useSupabaseUser()
+import { ref, onMounted } from 'vue'
 
-watch(user, () => {
-  if (user.value) {
+const checking = ref(true)
+
+onMounted(async () => {
+  try {
+    const user = await $fetch('/api/auth/me')
+    if (user && user.isAuthenticated) {
       // Redirect to protected page
-      return navigateTo('/')
+      await navigateTo('/')
+    }
+  } catch {
+    // Not authenticated, stay on page
+  } finally {
+    checking.value = false
   }
-}, { immediate: true })
+})
 </script>
 
 <template>
-  <div>Waiting for login...</div>
+  <div>{{ checking ? 'Checking authentication...' : 'Waiting for login...' }}</div>
 </template>
