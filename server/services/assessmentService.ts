@@ -1,15 +1,11 @@
-import { getSupabaseClient } from '~/server/utils/supabaseClient'
-import type {
-  Tables,
-  TablesInsert,
-  TablesUpdate
-} from '~/types/supabase'
-
-// Define type aliases for convenience
-type Assessment = Tables<'assessments'>
-type AssessmentInsert = TablesInsert<'assessments'>
-type AssessmentUpdate = TablesUpdate<'assessments'>
-type Student = Tables<'students'>
+// server/services/assessmentService.ts
+import { eq, and, gte, lte, sql, desc, asc, isNotNull } from 'drizzle-orm'
+import { getDb } from '~/server/utils/db'
+import {
+  assessments,
+  type Assessment,
+  type NewAssessment
+} from '~/server/db/schema'
 
 export interface ListAssessmentsParams {
   page?: number
@@ -22,7 +18,7 @@ export interface ListAssessmentsParams {
 
 export const assessmentService = {
   /**
-   * Retrieve a paginated list of assessments, with optional filtering.
+   * Retrieve a paginated list of assessments.
    */
   async getAssessments({
     page = 1,
@@ -32,189 +28,172 @@ export const assessmentService = {
     startDate = '',
     endDate = ''
   }: ListAssessmentsParams): Promise<{ data: Assessment[]; count: number }> {
-    const supabase = getSupabaseClient()
-
-    // Begin building the query for the "assessments" table.
-    let query = supabase
-      .from<Assessment>('assessments')
-      .select('*', { count: 'exact' })
-
-    // Apply filters if provided
-    if (studentId) {
-      query = query.eq('student_id', studentId)
-    }
-
-    if (assessmentType) {
-      query = query.eq('assessment_type', assessmentType)
-    }
-
-    if (startDate) {
-      query = query.gte('assessment_date', startDate)
-    }
-
-    if (endDate) {
-      query = query.lte('assessment_date', endDate)
-    }
-
-    // Calculate pagination offsets.
+    const db = getDb()
     const offset = (page - 1) * limit
-    query = query.range(offset, offset + limit - 1)
-    
-    // Order by assessment date, most recent first
-    query = query.order('assessment_date', { ascending: false })
 
-    // Execute the query.
-    const { data, error, count } = await query
-
-    if (error) {
-      throw new Error(`Failed to fetch assessments: ${error.message}`)
+    const conditions = []
+    if (studentId) {
+      conditions.push(eq(assessments.studentId, studentId))
+    }
+    if (assessmentType) {
+      conditions.push(eq(assessments.assessmentType, assessmentType))
+    }
+    if (startDate) {
+      conditions.push(gte(assessments.assessmentDate, startDate))
+    }
+    if (endDate) {
+      conditions.push(lte(assessments.assessmentDate, endDate))
     }
 
-    return { data: data ?? [], count: count ?? 0 }
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined
+
+    const data = await db
+      .select()
+      .from(assessments)
+      .where(whereClause)
+      .orderBy(desc(assessments.assessmentDate))
+      .limit(limit)
+      .offset(offset)
+
+    const countResult = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(assessments)
+      .where(whereClause)
+
+    const count = Number(countResult[0]?.count ?? 0)
+
+    return { data, count }
   },
 
   /**
    * Retrieve a single assessment by ID.
    */
   async getAssessmentById(id: string): Promise<Assessment> {
-    const supabase = getSupabaseClient()
-    const { data, error } = await supabase
-      .from<Assessment>('assessments')
-      .select('*')
-      .eq('id', id)
-      .single()
+    const db = getDb()
+    const result = await db
+      .select()
+      .from(assessments)
+      .where(eq(assessments.id, id))
+      .limit(1)
 
-    if (error) {
-      throw new Error(`Failed to get assessment with ID ${id}: ${error.message}`)
+    if (!result[0]) {
+      throw new Error(`Assessment with ID ${id} not found`)
     }
-    return data!
+    return result[0]
   },
 
   /**
    * Create a new assessment record.
    */
-  async createAssessment(assessmentData: AssessmentInsert): Promise<Assessment> {
-    const supabase = getSupabaseClient()
-    const { data, error } = await supabase
-      .from<Assessment>('assessments')
-      .insert(assessmentData)
-      .single()
+  async createAssessment(assessmentData: NewAssessment): Promise<Assessment> {
+    const db = getDb()
+    const result = await db
+      .insert(assessments)
+      .values(assessmentData)
+      .returning()
 
-    if (error) {
-      throw new Error(`Failed to create assessment: ${error.message}`)
+    if (!result[0]) {
+      throw new Error('Failed to create assessment')
     }
-    return data!
+    return result[0]
   },
 
   /**
    * Update an existing assessment record.
    */
-  async updateAssessment(id: string, assessmentData: AssessmentUpdate): Promise<Assessment> {
-    const supabase = getSupabaseClient()
-    const { data, error } = await supabase
-      .from<Assessment>('assessments')
-      .update(assessmentData)
-      .eq('id', id)
-      .single()
+  async updateAssessment(id: string, assessmentData: Partial<NewAssessment>): Promise<Assessment> {
+    const db = getDb()
+    const result = await db
+      .update(assessments)
+      .set({ ...assessmentData, updatedAt: new Date() })
+      .where(eq(assessments.id, id))
+      .returning()
 
-    if (error) {
-      throw new Error(`Failed to update assessment with ID ${id}: ${error.message}`)
+    if (!result[0]) {
+      throw new Error(`Failed to update assessment with ID ${id}`)
     }
-    return data!
+    return result[0]
   },
 
   /**
    * Delete an assessment record.
    */
   async deleteAssessment(id: string): Promise<Assessment> {
-    const supabase = getSupabaseClient()
-    const { data, error } = await supabase
-      .from<Assessment>('assessments')
-      .delete()
-      .eq('id', id)
-      .single()
+    const db = getDb()
+    const result = await db
+      .delete(assessments)
+      .where(eq(assessments.id, id))
+      .returning()
 
-    if (error) {
-      throw new Error(`Failed to delete assessment with ID ${id}: ${error.message}`)
+    if (!result[0]) {
+      throw new Error(`Failed to delete assessment with ID ${id}`)
     }
-    return data!
+    return result[0]
   },
 
   /**
    * Get a student's progress over time for a specific assessment type
    */
   async getStudentProgress(studentId: string, assessmentType?: string): Promise<Assessment[]> {
-    const supabase = getSupabaseClient()
-    
-    let query = supabase
-      .from<Assessment>('assessments')
-      .select('*')
-      .eq('student_id', studentId)
-      .order('assessment_date', { ascending: true })
-    
+    const db = getDb()
+
+    const conditions = [eq(assessments.studentId, studentId)]
     if (assessmentType) {
-      query = query.eq('assessment_type', assessmentType)
+      conditions.push(eq(assessments.assessmentType, assessmentType))
     }
-    
-    const { data, error } = await query
-    
-    if (error) {
-      throw new Error(`Failed to get progress for student ${studentId}: ${error.message}`)
-    }
-    
-    return data ?? []
+
+    return db
+      .select()
+      .from(assessments)
+      .where(and(...conditions))
+      .orderBy(asc(assessments.assessmentDate))
   },
-  
+
   /**
    * Get average scores across all students for an assessment type
    */
-  async getAverageScores(assessmentType: string): Promise<{ average: number, count: number }> {
-    const supabase = getSupabaseClient()
-    
-    const { data, error } = await supabase
-      .from<Assessment>('assessments')
-      .select('score')
-      .eq('assessment_type', assessmentType)
-      .not('score', 'is', null)
-    
-    if (error) {
-      throw new Error(`Failed to calculate average scores: ${error.message}`)
-    }
-    
+  async getAverageScores(assessmentType: string): Promise<{ average: number; count: number }> {
+    const db = getDb()
+
+    const data = await db
+      .select({ score: assessments.score })
+      .from(assessments)
+      .where(
+        and(
+          eq(assessments.assessmentType, assessmentType),
+          isNotNull(assessments.score)
+        )
+      )
+
     if (!data || data.length === 0) {
       return { average: 0, count: 0 }
     }
-    
-    const sum = data.reduce((acc, assessment) => acc + (assessment.score || 0), 0)
-    return { 
-      average: sum / data.length, 
-      count: data.length 
+
+    const sum = data.reduce((acc, assessment) => acc + Number(assessment.score || 0), 0)
+    return {
+      average: sum / data.length,
+      count: data.length
     }
   },
-  
+
   /**
    * Get list of all assessment types currently in use
    */
   async getAssessmentTypes(): Promise<string[]> {
-    const supabase = getSupabaseClient()
-    
-    const { data, error } = await supabase
-      .from<Assessment>('assessments')
-      .select('assessment_type')
-      .not('assessment_type', 'is', null)
-    
-    if (error) {
-      throw new Error(`Failed to get assessment types: ${error.message}`)
-    }
-    
-    // Extract unique assessment types
+    const db = getDb()
+
+    const data = await db
+      .select({ assessmentType: assessments.assessmentType })
+      .from(assessments)
+      .where(isNotNull(assessments.assessmentType))
+
     const types = new Set<string>()
-    data?.forEach(assessment => {
-      if (assessment.assessment_type) {
-        types.add(assessment.assessment_type)
+    data.forEach(assessment => {
+      if (assessment.assessmentType) {
+        types.add(assessment.assessmentType)
       }
     })
-    
+
     return Array.from(types)
   }
 }

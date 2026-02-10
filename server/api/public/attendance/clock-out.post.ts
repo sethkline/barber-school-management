@@ -1,4 +1,6 @@
-import { getSupabaseClient } from '~/server/utils/supabaseClient'
+import { eq, and, isNull } from 'drizzle-orm'
+import { getDb } from '~/server/utils/db'
+import { attendance, students } from '~/server/db/schema'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -12,47 +14,48 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    const supabase = getSupabaseClient()
+    const db = getDb()
 
     // Find active clock-in record
-    const { data: existingRecord } = await supabase
-      .from('attendance')
-      .select('*')
-      .eq('student_id', studentId)
-      .is('clock_out', null)
-      .single()
+    const existingRecords = await db
+      .select()
+      .from(attendance)
+      .where(and(
+        eq(attendance.studentId, studentId),
+        isNull(attendance.clockOut)
+      ))
+      .limit(1)
 
-    if (!existingRecord) {
+    if (existingRecords.length === 0) {
       throw createError({
         statusCode: 400,
         statusMessage: 'No active clock-in found',
       })
     }
 
-    // Update with clock out time
-    const { data, error } = await supabase
-      .from('attendance')
-      .update({
-        clock_out: new Date().toISOString(),
-      })
-      .eq('id', existingRecord.id)
-      .select()
-      .single()
+    const existingRecord = existingRecords[0]
 
-    if (error) throw error
+    // Update with clock out time
+    const [updated] = await db
+      .update(attendance)
+      .set({ clockOut: new Date() })
+      .where(eq(attendance.id, existingRecord.id))
+      .returning()
 
     // Get student name for confirmation
-    const { data: student } = await supabase
-      .from('students')
-      .select('first_name, last_name')
-      .eq('id', studentId)
-      .single()
+    const studentRecords = await db
+      .select({ firstName: students.firstName, lastName: students.lastName })
+      .from(students)
+      .where(eq(students.id, studentId))
+      .limit(1)
+
+    const student = studentRecords[0]
 
     return {
       success: true,
       message: 'Clocked out successfully',
-      studentName: student ? `${student.first_name} ${student.last_name}` : 'Student',
-      clockOut: data.clock_out,
+      studentName: student ? `${student.firstName} ${student.lastName}` : 'Student',
+      clockOut: updated.clockOut,
     }
   } catch (error: any) {
     console.error('Clock out error:', error)

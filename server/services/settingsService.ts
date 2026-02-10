@@ -1,12 +1,12 @@
 // server/services/settingsService.ts
-import { getSupabaseClient } from '~/server/utils/supabaseClient'
-import type {
-  Tables,
-  TablesInsert,
-  TablesUpdate
-} from '~/types/supabase'
+import { eq } from 'drizzle-orm'
+import { getDb } from '~/server/utils/db'
+import {
+  systemSettings,
+  type SystemSetting,
+  type NewSystemSetting
+} from '~/server/db/schema'
 
-// Define types for settings
 export interface SchoolInfo {
   id?: string
   name: string
@@ -38,269 +38,217 @@ export const settingsService = {
    * Get school information
    */
   async getSchoolInfo(): Promise<SchoolInfo> {
-    const supabase = getSupabaseClient()
-    
-    const { data, error } = await supabase
-      .from(SETTINGS_TABLE)
-      .select('*')
-      .eq('setting_type', 'school_info')
-      .single()
-    
-    if (error) {
-      // If no record found, return default values
-      if (error.code === 'PGRST116') {
-        return {
-          name: '',
-          address: '',
-          city: '',
-          state: '',
-          zip_code: '',
-          phone: '',
-          email: '',
-          website: ''
-        }
+    const db = getDb()
+
+    const result = await db
+      .select()
+      .from(systemSettings)
+      .where(eq(systemSettings.settingType, 'school_info'))
+      .limit(1)
+
+    if (!result[0]) {
+      return {
+        name: '',
+        address: '',
+        city: '',
+        state: '',
+        zip_code: '',
+        phone: '',
+        email: '',
+        website: ''
       }
-      throw new Error(`Failed to get school info: ${error.message}`)
     }
-    
-    return JSON.parse(data.setting_value)
+
+    return result[0].settingValue as unknown as SchoolInfo
   },
-  
+
   /**
    * Update school information
    */
   async updateSchoolInfo(schoolInfo: SchoolInfo): Promise<SchoolInfo> {
-    const supabase = getSupabaseClient()
-    
-    // Check if school info already exists
-    const { data: existingData, error: checkError } = await supabase
-      .from(SETTINGS_TABLE)
-      .select('id')
-      .eq('setting_type', 'school_info')
-      .maybeSingle()
-    
-    const settingValue = JSON.stringify(schoolInfo)
-    
-    if (existingData?.id) {
-      // Update existing record
-      const { error } = await supabase
-        .from(SETTINGS_TABLE)
-        .update({
-          setting_value: settingValue,
-          updated_at: new Date().toISOString()
+    const db = getDb()
+
+    const existing = await db
+      .select()
+      .from(systemSettings)
+      .where(eq(systemSettings.settingType, 'school_info'))
+      .limit(1)
+
+    if (existing[0]) {
+      await db
+        .update(systemSettings)
+        .set({
+          settingValue: schoolInfo as unknown as Record<string, unknown>,
+          updatedAt: new Date()
         })
-        .eq('id', existingData.id)
-      
-      if (error) {
-        throw new Error(`Failed to update school info: ${error.message}`)
-      }
+        .where(eq(systemSettings.id, existing[0].id))
     } else {
-      // Create new record
-      const { error } = await supabase
-        .from(SETTINGS_TABLE)
-        .insert({
-          setting_type: 'school_info',
-          setting_value: settingValue,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+      await db
+        .insert(systemSettings)
+        .values({
+          settingType: 'school_info',
+          settingValue: schoolInfo as unknown as Record<string, unknown>,
+          createdAt: new Date(),
+          updatedAt: new Date()
         })
-      
-      if (error) {
-        throw new Error(`Failed to create school info: ${error.message}`)
-      }
     }
-    
+
     return schoolInfo
   },
-  
+
   /**
    * Get program requirements
    */
   async getProgramRequirements(): Promise<ProgramRequirement[]> {
-    const supabase = getSupabaseClient()
-    
-    const { data, error } = await supabase
-      .from(SETTINGS_TABLE)
-      .select('*')
-      .eq('setting_type', 'program_requirements')
-      .single()
-    
-    if (error) {
-      // If no records found, return empty array
-      if (error.code === 'PGRST116') {
-        return []
-      }
-      throw new Error(`Failed to get program requirements: ${error.message}`)
+    const db = getDb()
+
+    const result = await db
+      .select()
+      .from(systemSettings)
+      .where(eq(systemSettings.settingType, 'program_requirements'))
+      .limit(1)
+
+    if (!result[0]) {
+      return []
     }
-    
-    return JSON.parse(data.setting_value)
+
+    return result[0].settingValue as unknown as ProgramRequirement[]
   },
-  
+
   /**
    * Update program requirements
    */
   async updateProgramRequirements(requirements: ProgramRequirement[]): Promise<ProgramRequirement[]> {
-    const supabase = getSupabaseClient()
-    
-    // Check if program requirements already exist
-    const { data: existingData, error: checkError } = await supabase
-      .from(SETTINGS_TABLE)
-      .select('id')
-      .eq('setting_type', 'program_requirements')
-      .maybeSingle()
-    
-    const settingValue = JSON.stringify(requirements)
-    
-    if (existingData?.id) {
-      // Update existing record
-      const { error } = await supabase
-        .from(SETTINGS_TABLE)
-        .update({
-          setting_value: settingValue,
-          updated_at: new Date().toISOString()
+    const db = getDb()
+
+    const existing = await db
+      .select()
+      .from(systemSettings)
+      .where(eq(systemSettings.settingType, 'program_requirements'))
+      .limit(1)
+
+    if (existing[0]) {
+      await db
+        .update(systemSettings)
+        .set({
+          settingValue: requirements as unknown as Record<string, unknown>,
+          updatedAt: new Date()
         })
-        .eq('id', existingData.id)
-      
-      if (error) {
-        throw new Error(`Failed to update program requirements: ${error.message}`)
-      }
+        .where(eq(systemSettings.id, existing[0].id))
     } else {
-      // Create new record
-      const { error } = await supabase
-        .from(SETTINGS_TABLE)
-        .insert({
-          setting_type: 'program_requirements',
-          setting_value: settingValue,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+      await db
+        .insert(systemSettings)
+        .values({
+          settingType: 'program_requirements',
+          settingValue: requirements as unknown as Record<string, unknown>,
+          createdAt: new Date(),
+          updatedAt: new Date()
         })
-      
-      if (error) {
-        throw new Error(`Failed to create program requirements: ${error.message}`)
-      }
     }
-    
+
     return requirements
   },
-  
+
   /**
    * Add a new program requirement
    */
   async addProgramRequirement(requirement: ProgramRequirement): Promise<ProgramRequirement[]> {
     const currentRequirements = await this.getProgramRequirements()
-    
-    // Generate an id if not provided
+
     if (!requirement.id) {
       requirement.id = crypto.randomUUID()
     }
-    
+
     const updatedRequirements = [...currentRequirements, requirement]
     await this.updateProgramRequirements(updatedRequirements)
-    
+
     return updatedRequirements
   },
-  
+
   /**
    * Update a program requirement
    */
   async updateProgramRequirement(requirement: ProgramRequirement): Promise<ProgramRequirement[]> {
     const currentRequirements = await this.getProgramRequirements()
-    
-    const updatedRequirements = currentRequirements.map(req => 
+
+    const updatedRequirements = currentRequirements.map(req =>
       req.id === requirement.id ? requirement : req
     )
-    
+
     await this.updateProgramRequirements(updatedRequirements)
-    
+
     return updatedRequirements
   },
-  
+
   /**
    * Delete a program requirement
    */
   async deleteProgramRequirement(requirementId: string): Promise<ProgramRequirement[]> {
     const currentRequirements = await this.getProgramRequirements()
-    
+
     const updatedRequirements = currentRequirements.filter(req => req.id !== requirementId)
-    
+
     await this.updateProgramRequirements(updatedRequirements)
-    
+
     return updatedRequirements
   },
-  
+
   /**
    * Get system theme settings
    */
   async getThemeSettings(): Promise<any> {
-    const supabase = getSupabaseClient()
-    
-    const { data, error } = await supabase
-      .from(SETTINGS_TABLE)
-      .select('*')
-      .eq('setting_type', 'theme_settings')
-      .single()
-    
-    if (error) {
-      // If no record found, return default values
-      if (error.code === 'PGRST116') {
-        return {
-          primaryColor: '#ef4444',
-          secondaryColor: '#0ea5e9',
-          darkMode: false,
-          customLogo: false,
-          logoUrl: ''
-        }
+    const db = getDb()
+
+    const result = await db
+      .select()
+      .from(systemSettings)
+      .where(eq(systemSettings.settingType, 'theme_settings'))
+      .limit(1)
+
+    if (!result[0]) {
+      return {
+        primaryColor: '#ef4444',
+        secondaryColor: '#0ea5e9',
+        darkMode: false,
+        customLogo: false,
+        logoUrl: ''
       }
-      throw new Error(`Failed to get theme settings: ${error.message}`)
     }
-    
-    return JSON.parse(data.setting_value)
+
+    return result[0].settingValue
   },
-  
+
   /**
    * Update system theme settings
    */
   async updateThemeSettings(themeSettings: any): Promise<any> {
-    const supabase = getSupabaseClient()
-    
-    // Check if theme settings already exist
-    const { data: existingData, error: checkError } = await supabase
-      .from(SETTINGS_TABLE)
-      .select('id')
-      .eq('setting_type', 'theme_settings')
-      .maybeSingle()
-    
-    const settingValue = JSON.stringify(themeSettings)
-    
-    if (existingData?.id) {
-      // Update existing record
-      const { error } = await supabase
-        .from(SETTINGS_TABLE)
-        .update({
-          setting_value: settingValue,
-          updated_at: new Date().toISOString()
+    const db = getDb()
+
+    const existing = await db
+      .select()
+      .from(systemSettings)
+      .where(eq(systemSettings.settingType, 'theme_settings'))
+      .limit(1)
+
+    if (existing[0]) {
+      await db
+        .update(systemSettings)
+        .set({
+          settingValue: themeSettings,
+          updatedAt: new Date()
         })
-        .eq('id', existingData.id)
-      
-      if (error) {
-        throw new Error(`Failed to update theme settings: ${error.message}`)
-      }
+        .where(eq(systemSettings.id, existing[0].id))
     } else {
-      // Create new record
-      const { error } = await supabase
-        .from(SETTINGS_TABLE)
-        .insert({
-          setting_type: 'theme_settings',
-          setting_value: settingValue,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+      await db
+        .insert(systemSettings)
+        .values({
+          settingType: 'theme_settings',
+          settingValue: themeSettings,
+          createdAt: new Date(),
+          updatedAt: new Date()
         })
-      
-      if (error) {
-        throw new Error(`Failed to create theme settings: ${error.message}`)
-      }
     }
-    
+
     return themeSettings
   }
 }

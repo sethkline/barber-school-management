@@ -1,22 +1,21 @@
 // server/services/studentService.ts
-
-import { getSupabaseClient } from '~/server/utils/supabaseClient';
-import type { Tables, TablesInsert, TablesUpdate } from '~/types/supabase';
-
-// Define type aliases for convenience
-type Student = Tables<'students'>;
-type StudentInsert = TablesInsert<'students'>;
-type StudentUpdate = TablesUpdate<'students'>;
-
-// For the student documents table:
-type StudentDocument = Tables<'student_documents'>;
-type StudentDocumentInsert = TablesInsert<'student_documents'>;
+import { eq, ilike, or, sql, and } from 'drizzle-orm'
+import { getDb } from '~/server/utils/db'
+import {
+  students,
+  studentDocuments,
+  legacyStudents,
+  type Student,
+  type NewStudent,
+  type StudentDocument,
+  type NewStudentDocument
+} from '~/server/db/schema'
 
 export interface ListStudentsParams {
-  page?: number;
-  limit?: number;
-  search?: string;
-  status?: string;
+  page?: number
+  limit?: number
+  search?: string
+  status?: string
 }
 
 export const studentService = {
@@ -29,173 +28,182 @@ export const studentService = {
     search = '',
     status = ''
   }: ListStudentsParams): Promise<{ data: Student[]; count: number }> {
-    const supabase = getSupabaseClient();
+    const db = getDb()
+    const offset = (page - 1) * limit
 
-    // Begin building the query for the "students" table.
-    let query = supabase.from<Student>('students').select('*', { count: 'exact' });
-
-    // Apply a filter by status if provided.
+    // Build where conditions
+    const conditions = []
     if (status) {
-      query = query.eq('status', status);
+      conditions.push(eq(students.status, status))
     }
-
-    // Apply a search filter against first_name, last_name, or email.
     if (search) {
-      // Using the OR filter with ilike to match patterns
-      query = query.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%`);
+      conditions.push(
+        or(
+          ilike(students.firstName, `%${search}%`),
+          ilike(students.lastName, `%${search}%`),
+          ilike(students.email, `%${search}%`)
+        )
+      )
     }
 
-    // Calculate pagination offsets.
-    const offset = (page - 1) * limit;
-    query = query.range(offset, offset + limit - 1);
+    // Get data with pagination
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined
 
-    // Execute the query.
-    const { data, error, count } = await query;
+    const data = await db
+      .select()
+      .from(students)
+      .where(whereClause)
+      .limit(limit)
+      .offset(offset)
 
-    if (error) {
-      throw new Error(`Failed to fetch students: ${error.message}`);
-    }
+    // Get total count
+    const countResult = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(students)
+      .where(whereClause)
 
-    return { data: data ?? [], count: count ?? 0 };
+    const count = Number(countResult[0]?.count ?? 0)
+
+    return { data, count }
   },
 
   /**
    * Retrieve a single student by ID.
    */
   async getStudentById(id: string): Promise<Student> {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase.from<Student>('students').select('*').eq('id', id).single();
+    const db = getDb()
+    const result = await db
+      .select()
+      .from(students)
+      .where(eq(students.id, id))
+      .limit(1)
 
-    if (error) {
-      throw new Error(`Failed to get student with ID ${id}: ${error.message}`);
+    if (!result[0]) {
+      throw new Error(`Student with ID ${id} not found`)
     }
-    return data!;
+    return result[0]
   },
 
   /**
    * Create a new student record.
    */
-  async createStudent(studentData: StudentInsert): Promise<Student> {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase.from<Student>('students').insert(studentData).single();
+  async createStudent(studentData: NewStudent): Promise<Student> {
+    const db = getDb()
+    const result = await db
+      .insert(students)
+      .values(studentData)
+      .returning()
 
-    if (error) {
-      throw new Error(`Failed to create student: ${error.message}`);
+    if (!result[0]) {
+      throw new Error('Failed to create student')
     }
-    return data!;
+    return result[0]
   },
 
   /**
    * Update an existing student record.
    */
-  async updateStudent(id: string, studentData: StudentUpdate): Promise<Student> {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase.from<Student>('students').update(studentData).eq('id', id).single();
+  async updateStudent(id: string, studentData: Partial<NewStudent>): Promise<Student> {
+    const db = getDb()
+    const result = await db
+      .update(students)
+      .set({ ...studentData, updatedAt: new Date() })
+      .where(eq(students.id, id))
+      .returning()
 
-    if (error) {
-      throw new Error(`Failed to update student with ID ${id}: ${error.message}`);
+    if (!result[0]) {
+      throw new Error(`Failed to update student with ID ${id}`)
     }
-    return data!;
+    return result[0]
   },
 
   /**
-   * Delete (or archive) a student record.
-   * For a soft delete, consider updating a status field instead.
+   * Delete a student record.
    */
   async deleteStudent(id: string): Promise<Student> {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase.from<Student>('students').delete().eq('id', id).single();
+    const db = getDb()
+    const result = await db
+      .delete(students)
+      .where(eq(students.id, id))
+      .returning()
 
-    if (error) {
-      throw new Error(`Failed to delete student with ID ${id}: ${error.message}`);
+    if (!result[0]) {
+      throw new Error(`Failed to delete student with ID ${id}`)
     }
-    return data!;
+    return result[0]
   },
 
   /**
    * List all documents for a given student.
    */
   async listStudentDocuments(studentId: string): Promise<StudentDocument[]> {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase
-      .from<StudentDocument>('student_documents')
-      .select('*')
-      .eq('student_id', studentId);
-
-    if (error) {
-      throw new Error(`Failed to fetch documents for student ${studentId}: ${error.message}`);
-    }
-    return data ?? [];
+    const db = getDb()
+    return db
+      .select()
+      .from(studentDocuments)
+      .where(eq(studentDocuments.studentId, studentId))
   },
 
   /**
    * Upload a new document for a student.
    */
-  async uploadStudentDocument(studentId: string, documentData: StudentDocumentInsert): Promise<StudentDocument> {
-    const supabase = getSupabaseClient();
-    // Ensure the document is associated with the correct student.
-    const dataToInsert = { ...documentData, student_id: studentId };
-    const { data, error } = await supabase.from<StudentDocument>('student_documents').insert(dataToInsert).single();
+  async uploadStudentDocument(studentId: string, documentData: NewStudentDocument): Promise<StudentDocument> {
+    const db = getDb()
+    const result = await db
+      .insert(studentDocuments)
+      .values({ ...documentData, studentId })
+      .returning()
 
-    if (error) {
-      throw new Error(`Failed to upload document for student ${studentId}: ${error.message}`);
+    if (!result[0]) {
+      throw new Error(`Failed to upload document for student ${studentId}`)
     }
-    return data!;
+    return result[0]
   },
 
   /**
    * Remove a specific student document.
    */
   async removeStudentDocument(studentId: string, documentId: string): Promise<StudentDocument> {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase
-      .from<StudentDocument>('student_documents')
-      .delete()
-      .eq('id', documentId)
-      .eq('student_id', studentId)
-      .single();
+    const db = getDb()
+    const result = await db
+      .delete(studentDocuments)
+      .where(
+        and(
+          eq(studentDocuments.id, documentId),
+          eq(studentDocuments.studentId, studentId)
+        )
+      )
+      .returning()
 
-    if (error) {
-      throw new Error(`Failed to delete document ${documentId} for student ${studentId}: ${error.message}`);
+    if (!result[0]) {
+      throw new Error(`Failed to delete document ${documentId} for student ${studentId}`)
     }
-    return data!;
+    return result[0]
   },
 
   /**
    * Archive a student by moving them to legacy_students table
    */
   async archiveStudent(id: string, studentData: Student): Promise<void> {
-    const supabase = getSupabaseClient();
+    const db = getDb()
 
-    try {
-      // Start a transaction to archive the student
-      const { error: archiveError } = await supabase.from('legacy_students').insert({
-        original_student_id: id,
-        first_name: studentData.first_name,
-        last_name: studentData.last_name,
-        email: studentData.email,
-        phone: studentData.phone,
-        address: studentData.address,
-        city: studentData.city,
-        zip_code: studentData.zip_code,
-        enrollment_date: studentData.enrollment_date,
-        graduation_date: studentData.expected_graduation_date,
-        notes: `Archived at ${new Date().toISOString()}`,
-        archived_at: new Date().toISOString()
-      });
+    // Insert into legacy_students
+    await db.insert(legacyStudents).values({
+      originalStudentId: id,
+      firstName: studentData.firstName,
+      lastName: studentData.lastName,
+      email: studentData.email,
+      phone: studentData.phone,
+      address: studentData.address,
+      city: studentData.city,
+      zipCode: studentData.zipCode,
+      enrollmentDate: studentData.enrollmentDate,
+      graduationDate: studentData.expectedGraduationDate,
+      notes: `Archived at ${new Date().toISOString()}`,
+      archivedAt: new Date()
+    })
 
-      if (archiveError) {
-        throw new Error(`Failed to archive student: ${archiveError.message}`);
-      }
-
-      // Delete from active students after successful archive
-      const { error: deleteError } = await supabase.from('students').delete().eq('id', id);
-
-      if (deleteError) {
-        throw new Error(`Failed to remove archived student: ${deleteError.message}`);
-      }
-    } catch (error: any) {
-      throw new Error(`Failed to archive student: ${error.message}`);
-    }
+    // Delete from active students
+    await db.delete(students).where(eq(students.id, id))
   }
-};
+}

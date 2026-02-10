@@ -1,14 +1,13 @@
-import { getSupabaseClient } from '~/server/utils/supabaseClient'
-import type {
-  Tables,
-  TablesInsert,
-  TablesUpdate
-} from '~/types/supabase'
-
-// Define type aliases for convenience
-type Lead = Tables<'leads'>
-type LeadInsert = TablesInsert<'leads'>
-type LeadUpdate = TablesUpdate<'leads'>
+// server/services/leadService.ts
+import { eq, ilike, or, sql, and, gte, lte, desc } from 'drizzle-orm'
+import { getDb } from '~/server/utils/db'
+import {
+  leads,
+  students,
+  type Lead,
+  type NewLead,
+  type Student
+} from '~/server/db/schema'
 
 export interface ListLeadsParams {
   page?: number
@@ -31,170 +30,165 @@ export const leadService = {
     fromDate = '',
     toDate = ''
   }: ListLeadsParams): Promise<{ data: Lead[]; count: number }> {
-    const supabase = getSupabaseClient()
+    const db = getDb()
+    const offset = (page - 1) * limit
 
-    // Begin building the query for the "leads" table.
-    let query = supabase
-      .from<Lead>('leads')
-      .select('*', { count: 'exact' })
-
-    // Apply a filter by status if provided.
+    const conditions = []
     if (status) {
-      query = query.eq('status', status)
+      conditions.push(eq(leads.status, status))
     }
-
-    // Apply date range filters if provided
     if (fromDate) {
-      query = query.gte('created_at', fromDate)
+      conditions.push(gte(leads.createdAt, new Date(fromDate)))
     }
-    
     if (toDate) {
-      query = query.lte('created_at', toDate)
+      conditions.push(lte(leads.createdAt, new Date(toDate)))
     }
-
-    // Apply a search filter against first_name, last_name, or email.
     if (search) {
-      // Using the OR filter with ilike to match patterns
-      query = query.or(
-        `first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%`
+      conditions.push(
+        or(
+          ilike(leads.firstName, `%${search}%`),
+          ilike(leads.lastName, `%${search}%`),
+          ilike(leads.email, `%${search}%`)
+        )
       )
     }
 
-    // Calculate pagination offsets.
-    const offset = (page - 1) * limit
-    query = query.range(offset, offset + limit - 1)
-    
-    // Order by creation date (newest first)
-    query = query.order('created_at', { ascending: false })
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined
 
-    // Execute the query.
-    const { data, error, count } = await query
+    const data = await db
+      .select()
+      .from(leads)
+      .where(whereClause)
+      .orderBy(desc(leads.createdAt))
+      .limit(limit)
+      .offset(offset)
 
-    if (error) {
-      throw new Error(`Failed to fetch leads: ${error.message}`)
-    }
+    const countResult = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(leads)
+      .where(whereClause)
 
-    return { data: data ?? [], count: count ?? 0 }
+    const count = Number(countResult[0]?.count ?? 0)
+
+    return { data, count }
   },
 
   /**
    * Retrieve a single lead by ID.
    */
   async getLeadById(id: string): Promise<Lead> {
-    const supabase = getSupabaseClient()
-    const { data, error } = await supabase
-      .from<Lead>('leads')
-      .select('*')
-      .eq('id', id)
-      .single()
+    const db = getDb()
+    const result = await db
+      .select()
+      .from(leads)
+      .where(eq(leads.id, id))
+      .limit(1)
 
-    if (error) {
-      throw new Error(`Failed to get lead with ID ${id}: ${error.message}`)
+    if (!result[0]) {
+      throw new Error(`Lead with ID ${id} not found`)
     }
-    return data!
+    return result[0]
   },
 
   /**
    * Create a new lead record.
    */
-  async createLead(leadData: LeadInsert): Promise<Lead> {
-    const supabase = getSupabaseClient()
-    const { data, error } = await supabase
-      .from<Lead>('leads')
-      .insert(leadData)
-      .single()
+  async createLead(leadData: NewLead): Promise<Lead> {
+    const db = getDb()
+    const result = await db
+      .insert(leads)
+      .values(leadData)
+      .returning()
 
-    if (error) {
-      throw new Error(`Failed to create lead: ${error.message}`)
+    if (!result[0]) {
+      throw new Error('Failed to create lead')
     }
-    return data!
+    return result[0]
   },
 
   /**
    * Update an existing lead record.
    */
-  async updateLead(id: string, leadData: LeadUpdate): Promise<Lead> {
-    const supabase = getSupabaseClient()
-    const { data, error } = await supabase
-      .from<Lead>('leads')
-      .update(leadData)
-      .eq('id', id)
-      .single()
+  async updateLead(id: string, leadData: Partial<NewLead>): Promise<Lead> {
+    const db = getDb()
+    const result = await db
+      .update(leads)
+      .set({ ...leadData, updatedAt: new Date() })
+      .where(eq(leads.id, id))
+      .returning()
 
-    if (error) {
-      throw new Error(`Failed to update lead with ID ${id}: ${error.message}`)
+    if (!result[0]) {
+      throw new Error(`Failed to update lead with ID ${id}`)
     }
-    return data!
+    return result[0]
   },
 
   /**
    * Delete a lead record.
    */
   async deleteLead(id: string): Promise<Lead> {
-    const supabase = getSupabaseClient()
-    const { data, error } = await supabase
-      .from<Lead>('leads')
-      .delete()
-      .eq('id', id)
-      .single()
+    const db = getDb()
+    const result = await db
+      .delete(leads)
+      .where(eq(leads.id, id))
+      .returning()
 
-    if (error) {
-      throw new Error(`Failed to delete lead with ID ${id}: ${error.message}`)
+    if (!result[0]) {
+      throw new Error(`Failed to delete lead with ID ${id}`)
     }
-    return data!
+    return result[0]
   },
-  
+
   /**
    * Convert a lead to a student.
    */
-  async convertLeadToStudent(id: string): Promise<{ student: Tables<'students'>; lead: Lead }> {
-    const supabase = getSupabaseClient()
-    
-    // First, get the lead data
-    const { data: lead, error: leadError } = await supabase
-      .from<Lead>('leads')
-      .select('*')
-      .eq('id', id)
-      .single()
-      
-    if (leadError) {
-      throw new Error(`Failed to get lead for conversion: ${leadError.message}`)
+  async convertLeadToStudent(id: string): Promise<{ student: Student; lead: Lead }> {
+    const db = getDb()
+
+    // Get the lead data
+    const leadResult = await db
+      .select()
+      .from(leads)
+      .where(eq(leads.id, id))
+      .limit(1)
+
+    if (!leadResult[0]) {
+      throw new Error(`Lead with ID ${id} not found`)
     }
-    
-    // Create a new student record from the lead data
-    const studentData = {
-      first_name: lead.first_name,
-      last_name: lead.last_name,
-      email: lead.email,
-      phone: lead.phone,
-      address: lead.address,
-      city: lead.city,
-      zip_code: lead.zip_code,
-      enrollment_date: new Date().toISOString().split('T')[0], // Today's date
-      status: 'new'
+
+    const lead = leadResult[0]
+
+    // Create a new student from the lead
+    const studentResult = await db
+      .insert(students)
+      .values({
+        firstName: lead.firstName,
+        lastName: lead.lastName,
+        email: lead.email,
+        phone: lead.phone,
+        address: lead.address,
+        city: lead.city,
+        zipCode: lead.zipCode,
+        enrollmentDate: new Date().toISOString().split('T')[0],
+        status: 'new'
+      })
+      .returning()
+
+    if (!studentResult[0]) {
+      throw new Error('Failed to create student from lead')
     }
-    
-    // Insert the new student
-    const { data: student, error: studentError } = await supabase
-      .from<Tables<'students'>>('students')
-      .insert(studentData)
-      .single()
-      
-    if (studentError) {
-      throw new Error(`Failed to create student from lead: ${studentError.message}`)
+
+    // Update the lead status to converted
+    const updatedLeadResult = await db
+      .update(leads)
+      .set({ status: 'converted', updatedAt: new Date() })
+      .where(eq(leads.id, id))
+      .returning()
+
+    if (!updatedLeadResult[0]) {
+      throw new Error('Failed to update lead status after conversion')
     }
-    
-    // Update the lead status to 'converted'
-    const { data: updatedLead, error: updateError } = await supabase
-      .from<Lead>('leads')
-      .update({ status: 'converted' })
-      .eq('id', id)
-      .single()
-      
-    if (updateError) {
-      throw new Error(`Failed to update lead status after conversion: ${updateError.message}`)
-    }
-    
-    return { student, lead: updatedLead }
+
+    return { student: studentResult[0], lead: updatedLeadResult[0] }
   }
 }

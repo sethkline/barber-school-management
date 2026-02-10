@@ -1,23 +1,29 @@
-import { getSupabaseClient } from '~/server/utils/supabaseClient'
+import { eq, asc } from 'drizzle-orm'
+import { getDb } from '~/server/utils/db'
+import { students } from '~/server/db/schema'
 
 // Public endpoint - no auth required
 export default defineEventHandler(async (event) => {
   try {
-    const supabase = getSupabaseClient()
+    const db = getDb()
 
     // Get all active students for the dropdown
-    const { data, error } = await supabase
-      .from('students')
-      .select('id, first_name, last_name, profile_image_url, status')
-      .eq('status', 'active')
-      .order('last_name', { ascending: true })
-
-    if (error) throw error
+    const data = await db
+      .select({
+        id: students.id,
+        firstName: students.firstName,
+        lastName: students.lastName,
+        photoUrl: students.photoUrl,
+        status: students.status
+      })
+      .from(students)
+      .where(eq(students.status, 'active'))
+      .orderBy(asc(students.lastName))
 
     return data.map(student => ({
       id: student.id,
-      name: `${student.first_name} ${student.last_name}`,
-      imageUrl: student.profile_image_url,
+      name: `${student.firstName} ${student.lastName}`,
+      imageUrl: student.photoUrl,
     }))
   } catch (error: any) {
     console.error('Error fetching students:', error)

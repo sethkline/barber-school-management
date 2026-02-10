@@ -1,4 +1,6 @@
-import { getSupabaseClient } from '~/server/utils/supabaseClient'
+import { eq, and, isNull } from 'drizzle-orm'
+import { getDb } from '~/server/utils/db'
+import { attendance, students } from '~/server/db/schema'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -12,17 +14,19 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    const supabase = getSupabaseClient()
+    const db = getDb()
 
     // Check if student is already clocked in
-    const { data: existingRecord } = await supabase
-      .from('attendance')
-      .select('*')
-      .eq('student_id', studentId)
-      .is('clock_out', null)
-      .single()
+    const existingRecords = await db
+      .select()
+      .from(attendance)
+      .where(and(
+        eq(attendance.studentId, studentId),
+        isNull(attendance.clockOut)
+      ))
+      .limit(1)
 
-    if (existingRecord) {
+    if (existingRecords.length > 0) {
       throw createError({
         statusCode: 400,
         statusMessage: 'Student is already clocked in',
@@ -30,30 +34,31 @@ export default defineEventHandler(async (event) => {
     }
 
     // Create new attendance record
-    const { data, error } = await supabase
-      .from('attendance')
-      .insert({
-        student_id: studentId,
-        clock_in: new Date().toISOString(),
+    const today = new Date().toISOString().split('T')[0]
+    const [record] = await db
+      .insert(attendance)
+      .values({
+        studentId: studentId,
+        attendanceDate: today,
+        clockIn: new Date(),
         status: 'present',
       })
-      .select()
-      .single()
-
-    if (error) throw error
+      .returning()
 
     // Get student name for confirmation
-    const { data: student } = await supabase
-      .from('students')
-      .select('first_name, last_name')
-      .eq('id', studentId)
-      .single()
+    const studentRecords = await db
+      .select({ firstName: students.firstName, lastName: students.lastName })
+      .from(students)
+      .where(eq(students.id, studentId))
+      .limit(1)
+
+    const student = studentRecords[0]
 
     return {
       success: true,
       message: 'Clocked in successfully',
-      studentName: student ? `${student.first_name} ${student.last_name}` : 'Student',
-      clockIn: data.clock_in,
+      studentName: student ? `${student.firstName} ${student.lastName}` : 'Student',
+      clockIn: record.clockIn,
     }
   } catch (error: any) {
     console.error('Clock in error:', error)

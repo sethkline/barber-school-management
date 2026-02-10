@@ -1,0 +1,45 @@
+# Build stage
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies
+RUN npm ci
+
+# Copy source code
+COPY . .
+
+# Build the application
+RUN npm run build
+
+# Production stage
+FROM node:20-alpine
+
+# Create non-root user for security
+RUN addgroup -g 1001 nuxt && adduser -u 1001 -G nuxt -D nuxt
+
+WORKDIR /app
+
+# Copy built output from builder stage
+COPY --from=builder --chown=nuxt:nuxt /app/.output ./
+
+# Switch to non-root user
+USER nuxt
+
+# Expose port
+EXPOSE 3000
+
+# Set environment variables
+ENV HOST=0.0.0.0
+ENV PORT=3000
+ENV NODE_ENV=production
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1
+
+# Start the application
+CMD ["node", "server/index.mjs"]

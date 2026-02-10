@@ -1,54 +1,87 @@
-// server/api/auth/login.post.ts
-import { H3Event, readBody, setCookie, sendError, createError } from 'h3'
-import { authService } from '~/server/services/authService'
+// Login endpoint using Cognito
+import { cognitoService } from '~/server/utils/cognitoClient'
 
-export default defineEventHandler(async (event: H3Event) => {
+export default defineEventHandler(async (event) => {
+  const body = await readBody(event)
+  const { email, password } = body
+
+  if (!email || !password) {
+    throw createError({
+      statusCode: 400,
+      message: 'Email and password are required'
+    })
+  }
+
   try {
-    // Parse the login credentials from the request body.
-    const credentials = await readBody(event) as { email: string, password: string }
-    
-    // Validate credentials using your authService.
-    const result = await authService.login(credentials)
-    
-    // Set an HTTP-only cookie for the access token.
-    setCookie(event, 'access_token', result.session.access_token, {
+    // Authenticate with Cognito
+    const tokens = await cognitoService.signIn(email, password)
+
+    // Get user details
+    const user = await cognitoService.getUser(tokens.accessToken)
+
+    // Set cookies
+    setCookie(event, 'access_token', tokens.accessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
       path: '/',
-      maxAge: result.session.expires_in, // in seconds; adjust as needed
+      maxAge: tokens.expiresIn
     })
 
-    // Optionally, set a cookie for the refresh token.
-    setCookie(event, 'refresh_token', result.session.refresh_token, {
+    setCookie(event, 'refresh_token', tokens.refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
       path: '/',
-      // Set maxAge appropriate for your refresh token lifetime.
+      maxAge: 60 * 60 * 24 * 30 // 30 days
     })
-    
-    // Get user metadata to extract role
-    const userMetadata = result.user.user_metadata || {}
-    const appMetadata = result.user.app_metadata || {}
-    
-    // Extract first name and last name from metadata if available
-    const firstName = userMetadata.first_name || ''
-    const lastName = userMetadata.last_name || ''
 
-    const isActive = userMetadata.is_active !== false; 
-    
-    // Return user information with properly extracted role
+    setCookie(event, 'id_token', tokens.idToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: tokens.expiresIn
+    })
+
     return {
       user: {
-        id: result.user.id,
-        email: result.user.email,
-        firstName: firstName,
-        lastName: lastName,
-        role: userMetadata.role || appMetadata.role || 'admin',
-        is_active: isActive
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+        is_active: user.isActive
       }
     }
   } catch (error: any) {
-    // Return an error response if something goes wrong.
-    return sendError(event, createError({ statusCode: 400, statusMessage: error.message }))
+    console.error('Login error:', error)
+
+    // Handle specific Cognito errors
+    if (error.name === 'NotAuthorizedException') {
+      throw createError({
+        statusCode: 401,
+        message: 'Invalid email or password'
+      })
+    }
+
+    if (error.name === 'UserNotFoundException') {
+      throw createError({
+        statusCode: 401,
+        message: 'Invalid email or password'
+      })
+    }
+
+    if (error.name === 'UserNotConfirmedException') {
+      throw createError({
+        statusCode: 401,
+        message: 'Please verify your email address'
+      })
+    }
+
+    throw createError({
+      statusCode: 500,
+      message: `Authentication failed: ${error.message}`
+    })
   }
 })

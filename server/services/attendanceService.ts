@@ -1,24 +1,21 @@
-import { getSupabaseClient } from '~/server/utils/supabaseClient'
-import type {
-  Tables,
-  TablesInsert,
-  TablesUpdate
-} from '~/types/supabase'
-
-// Define type aliases for convenience
-type Attendance = Tables<'attendance'>
-type AttendanceInsert = TablesInsert<'attendance'>
-type AttendanceUpdate = TablesUpdate<'attendance'>
-type Student = Tables<'students'>
+// server/services/attendanceService.ts
+import { eq, and, gte, lte, sql, desc, asc } from 'drizzle-orm'
+import { getDb } from '~/server/utils/db'
+import {
+  attendance,
+  students,
+  type Attendance,
+  type NewAttendance
+} from '~/server/db/schema'
 
 export interface ListAttendanceParams {
-  date?: string // YYYY-MM-DD format
+  date?: string
   studentId?: string
   page?: number
   limit?: number
   status?: string
-  startDate?: string // YYYY-MM-DD format
-  endDate?: string // YYYY-MM-DD format
+  startDate?: string
+  endDate?: string
 }
 
 export const attendanceService = {
@@ -34,339 +31,314 @@ export const attendanceService = {
     startDate,
     endDate
   }: ListAttendanceParams): Promise<{ data: Attendance[]; count: number }> {
-    const supabase = getSupabaseClient()
-
-    // Begin building the query for the "attendance" table.
-    let query = supabase
-      .from<Attendance>('attendance')
-      .select('*', { count: 'exact' })
-
-    // Apply filters if provided
-    if (date) {
-      query = query.eq('attendance_date', date)
-    }
-
-    if (studentId) {
-      query = query.eq('student_id', studentId)
-    }
-
-    if (status) {
-      query = query.eq('status', status)
-    }
-
-    // Date range filtering
-    if (startDate && endDate) {
-      query = query
-        .gte('attendance_date', startDate)
-        .lte('attendance_date', endDate)
-    } else if (startDate) {
-      query = query.gte('attendance_date', startDate)
-    } else if (endDate) {
-      query = query.lte('attendance_date', endDate)
-    }
-
-    // Calculate pagination offsets.
+    const db = getDb()
     const offset = (page - 1) * limit
-    query = query.range(offset, offset + limit - 1)
-    
-    // Order by date (most recent first) and then by clock_in time
-    query = query.order('attendance_date', { ascending: false })
-             .order('clock_in', { ascending: true, nullsLast: true })
 
-    // Execute the query.
-    const { data, error, count } = await query
-
-    if (error) {
-      throw new Error(`Failed to fetch attendance records: ${error.message}`)
+    const conditions = []
+    if (date) {
+      conditions.push(eq(attendance.attendanceDate, date))
+    }
+    if (studentId) {
+      conditions.push(eq(attendance.studentId, studentId))
+    }
+    if (status) {
+      conditions.push(eq(attendance.status, status))
+    }
+    if (startDate) {
+      conditions.push(gte(attendance.attendanceDate, startDate))
+    }
+    if (endDate) {
+      conditions.push(lte(attendance.attendanceDate, endDate))
     }
 
-    return { data: data ?? [], count: count ?? 0 }
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined
+
+    const data = await db
+      .select()
+      .from(attendance)
+      .where(whereClause)
+      .orderBy(desc(attendance.attendanceDate), asc(attendance.clockIn))
+      .limit(limit)
+      .offset(offset)
+
+    const countResult = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(attendance)
+      .where(whereClause)
+
+    const count = Number(countResult[0]?.count ?? 0)
+
+    return { data, count }
   },
 
   /**
    * Retrieve a single attendance record by ID.
    */
   async getAttendanceById(id: string): Promise<Attendance> {
-    const supabase = getSupabaseClient()
-    const { data, error } = await supabase
-      .from<Attendance>('attendance')
-      .select('*')
-      .eq('id', id)
-      .single()
+    const db = getDb()
+    const result = await db
+      .select()
+      .from(attendance)
+      .where(eq(attendance.id, id))
+      .limit(1)
 
-    if (error) {
-      throw new Error(`Failed to get attendance record with ID ${id}: ${error.message}`)
+    if (!result[0]) {
+      throw new Error(`Attendance record with ID ${id} not found`)
     }
-    return data!
+    return result[0]
   },
 
   /**
    * Create a new attendance record.
    */
-  async createAttendance(attendanceData: AttendanceInsert): Promise<Attendance> {
-    const supabase = getSupabaseClient()
-    const { data, error } = await supabase
-      .from<Attendance>('attendance')
-      .insert(attendanceData)
-      .single()
+  async createAttendance(attendanceData: NewAttendance): Promise<Attendance> {
+    const db = getDb()
+    const result = await db
+      .insert(attendance)
+      .values(attendanceData)
+      .returning()
 
-    if (error) {
-      throw new Error(`Failed to create attendance record: ${error.message}`)
+    if (!result[0]) {
+      throw new Error('Failed to create attendance record')
     }
-    return data!
+    return result[0]
   },
 
   /**
    * Update an existing attendance record.
    */
-  async updateAttendance(id: string, attendanceData: AttendanceUpdate): Promise<Attendance> {
-    const supabase = getSupabaseClient()
-    const { data, error } = await supabase
-      .from<Attendance>('attendance')
-      .update(attendanceData)
-      .eq('id', id)
-      .single()
+  async updateAttendance(id: string, attendanceData: Partial<NewAttendance>): Promise<Attendance> {
+    const db = getDb()
+    const result = await db
+      .update(attendance)
+      .set({ ...attendanceData, updatedAt: new Date() })
+      .where(eq(attendance.id, id))
+      .returning()
 
-    if (error) {
-      throw new Error(`Failed to update attendance record with ID ${id}: ${error.message}`)
+    if (!result[0]) {
+      throw new Error(`Failed to update attendance record with ID ${id}`)
     }
-    return data!
+    return result[0]
   },
 
   /**
    * Delete an attendance record.
    */
   async deleteAttendance(id: string): Promise<Attendance> {
-    const supabase = getSupabaseClient()
-    const { data, error } = await supabase
-      .from<Attendance>('attendance')
-      .delete()
-      .eq('id', id)
-      .single()
+    const db = getDb()
+    const result = await db
+      .delete(attendance)
+      .where(eq(attendance.id, id))
+      .returning()
 
-    if (error) {
-      throw new Error(`Failed to delete attendance record with ID ${id}: ${error.message}`)
+    if (!result[0]) {
+      throw new Error(`Failed to delete attendance record with ID ${id}`)
     }
-    return data!
+    return result[0]
   },
 
   /**
    * Clock in a student.
    */
   async clockIn(studentId: string, attendanceDate: string): Promise<Attendance> {
-    const supabase = getSupabaseClient()
-    
+    const db = getDb()
+
     // Check if there's already an attendance record for this student and date
-    const { data: existingRecord, error: checkError } = await supabase
-      .from<Attendance>('attendance')
-      .select('*')
-      .eq('student_id', studentId)
-      .eq('attendance_date', attendanceDate)
-      .single()
-    
-    if (checkError && checkError.code !== 'PGRST116') { // PGRST116 is the "no rows returned" error code
-      throw new Error(`Failed to check existing attendance: ${checkError.message}`)
-    }
-    
-    // If record exists, update it with clock_in time
-    if (existingRecord) {
-      const { data, error } = await supabase
-        .from<Attendance>('attendance')
-        .update({
-          clock_in: new Date().toISOString(),
-          status: 'present'
+    const existing = await db
+      .select()
+      .from(attendance)
+      .where(
+        and(
+          eq(attendance.studentId, studentId),
+          eq(attendance.attendanceDate, attendanceDate)
+        )
+      )
+      .limit(1)
+
+    if (existing[0]) {
+      // Update existing record
+      const result = await db
+        .update(attendance)
+        .set({
+          clockIn: new Date(),
+          status: 'present',
+          updatedAt: new Date()
         })
-        .eq('id', existingRecord.id)
-        .single()
-      
-      if (error) {
-        throw new Error(`Failed to clock in student: ${error.message}`)
+        .where(eq(attendance.id, existing[0].id))
+        .returning()
+
+      if (!result[0]) {
+        throw new Error('Failed to clock in student')
       }
-      return data!
+      return result[0]
     }
-    
-    // Otherwise, create a new record
-    const { data, error } = await supabase
-      .from<Attendance>('attendance')
-      .insert({
-        student_id: studentId,
-        attendance_date: attendanceDate,
-        clock_in: new Date().toISOString(),
+
+    // Create new record
+    const result = await db
+      .insert(attendance)
+      .values({
+        studentId,
+        attendanceDate,
+        clockIn: new Date(),
         status: 'present'
       })
-      .single()
-    
-    if (error) {
-      throw new Error(`Failed to clock in student: ${error.message}`)
+      .returning()
+
+    if (!result[0]) {
+      throw new Error('Failed to clock in student')
     }
-    return data!
+    return result[0]
   },
 
   /**
    * Clock out a student.
    */
   async clockOut(studentId: string, attendanceDate: string): Promise<Attendance> {
-    const supabase = getSupabaseClient()
-    
-    // Find the attendance record for this student and date
-    const { data: existingRecord, error: checkError } = await supabase
-      .from<Attendance>('attendance')
-      .select('*')
-      .eq('student_id', studentId)
-      .eq('attendance_date', attendanceDate)
-      .single()
-    
-    if (checkError) {
-      throw new Error(`No attendance record found for clocking out: ${checkError.message}`)
+    const db = getDb()
+
+    const existing = await db
+      .select()
+      .from(attendance)
+      .where(
+        and(
+          eq(attendance.studentId, studentId),
+          eq(attendance.attendanceDate, attendanceDate)
+        )
+      )
+      .limit(1)
+
+    if (!existing[0]) {
+      throw new Error('No attendance record found for clocking out')
     }
-    
-    // Update the record with clock_out time
-    const { data, error } = await supabase
-      .from<Attendance>('attendance')
-      .update({
-        clock_out: new Date().toISOString()
+
+    const result = await db
+      .update(attendance)
+      .set({
+        clockOut: new Date(),
+        updatedAt: new Date()
       })
-      .eq('id', existingRecord.id)
-      .single()
-    
-    if (error) {
-      throw new Error(`Failed to clock out student: ${error.message}`)
+      .where(eq(attendance.id, existing[0].id))
+      .returning()
+
+    if (!result[0]) {
+      throw new Error('Failed to clock out student')
     }
-    return data!
+    return result[0]
   },
 
   /**
    * Mark a student as absent.
    */
-  async markAbsent(studentId: string, attendanceDate: string, comment?: string): Promise<Attendance> {
-    const supabase = getSupabaseClient()
-    
-    // Check if there's already an attendance record for this student and date
-    const { data: existingRecord, error: checkError } = await supabase
-      .from<Attendance>('attendance')
-      .select('*')
-      .eq('student_id', studentId)
-      .eq('attendance_date', attendanceDate)
-      .single()
-    
-    if (checkError && checkError.code !== 'PGRST116') {
-      throw new Error(`Failed to check existing attendance: ${checkError.message}`)
-    }
-    
-    // If record exists, update its status
-    if (existingRecord) {
-      const { data, error } = await supabase
-        .from<Attendance>('attendance')
-        .update({
-          status: 'absent',
-          // Add comment field if needed in your schema
-        })
-        .eq('id', existingRecord.id)
-        .single()
-      
-      if (error) {
-        throw new Error(`Failed to mark student as absent: ${error.message}`)
+  async markAbsent(studentId: string, attendanceDate: string): Promise<Attendance> {
+    const db = getDb()
+
+    const existing = await db
+      .select()
+      .from(attendance)
+      .where(
+        and(
+          eq(attendance.studentId, studentId),
+          eq(attendance.attendanceDate, attendanceDate)
+        )
+      )
+      .limit(1)
+
+    if (existing[0]) {
+      const result = await db
+        .update(attendance)
+        .set({ status: 'absent', updatedAt: new Date() })
+        .where(eq(attendance.id, existing[0].id))
+        .returning()
+
+      if (!result[0]) {
+        throw new Error('Failed to mark student as absent')
       }
-      return data!
+      return result[0]
     }
-    
-    // Otherwise, create a new record
-    const { data, error } = await supabase
-      .from<Attendance>('attendance')
-      .insert({
-        student_id: studentId,
-        attendance_date: attendanceDate,
-        status: 'absent',
-        // Add comment field if needed
+
+    const result = await db
+      .insert(attendance)
+      .values({
+        studentId,
+        attendanceDate,
+        status: 'absent'
       })
-      .single()
-    
-    if (error) {
-      throw new Error(`Failed to mark student as absent: ${error.message}`)
+      .returning()
+
+    if (!result[0]) {
+      throw new Error('Failed to mark student as absent')
     }
-    return data!
+    return result[0]
   },
 
   /**
-   * Mark a student as excused from attendance.
+   * Mark a student as excused.
    */
-  async markExcused(studentId: string, attendanceDate: string, reason?: string): Promise<Attendance> {
-    const supabase = getSupabaseClient()
-    
-    // Check if there's already an attendance record for this student and date
-    const { data: existingRecord, error: checkError } = await supabase
-      .from<Attendance>('attendance')
-      .select('*')
-      .eq('student_id', studentId)
-      .eq('attendance_date', attendanceDate)
-      .single()
-    
-    if (checkError && checkError.code !== 'PGRST116') {
-      throw new Error(`Failed to check existing attendance: ${checkError.message}`)
-    }
-    
-    // If record exists, update its status
-    if (existingRecord) {
-      const { data, error } = await supabase
-        .from<Attendance>('attendance')
-        .update({
-          status: 'excused',
-          // Add reason field if needed in your schema
-        })
-        .eq('id', existingRecord.id)
-        .single()
-      
-      if (error) {
-        throw new Error(`Failed to mark student as excused: ${error.message}`)
+  async markExcused(studentId: string, attendanceDate: string): Promise<Attendance> {
+    const db = getDb()
+
+    const existing = await db
+      .select()
+      .from(attendance)
+      .where(
+        and(
+          eq(attendance.studentId, studentId),
+          eq(attendance.attendanceDate, attendanceDate)
+        )
+      )
+      .limit(1)
+
+    if (existing[0]) {
+      const result = await db
+        .update(attendance)
+        .set({ status: 'excused', updatedAt: new Date() })
+        .where(eq(attendance.id, existing[0].id))
+        .returning()
+
+      if (!result[0]) {
+        throw new Error('Failed to mark student as excused')
       }
-      return data!
+      return result[0]
     }
-    
-    // Otherwise, create a new record
-    const { data, error } = await supabase
-      .from<Attendance>('attendance')
-      .insert({
-        student_id: studentId,
-        attendance_date: attendanceDate,
-        status: 'excused',
-        // Add reason field if needed
+
+    const result = await db
+      .insert(attendance)
+      .values({
+        studentId,
+        attendanceDate,
+        status: 'excused'
       })
-      .single()
-    
-    if (error) {
-      throw new Error(`Failed to mark student as excused: ${error.message}`)
+      .returning()
+
+    if (!result[0]) {
+      throw new Error('Failed to mark student as excused')
     }
-    return data!
+    return result[0]
   },
 
   /**
    * Get attendance statistics for a date range.
    */
   async getAttendanceStats(startDate: string, endDate: string): Promise<any> {
-    const supabase = getSupabaseClient()
-    
-    // Get all attendance records for the date range
-    const { data, error } = await supabase
-      .from<Attendance>('attendance')
-      .select('*')
-      .gte('attendance_date', startDate)
-      .lte('attendance_date', endDate)
-    
-    if (error) {
-      throw new Error(`Failed to fetch attendance statistics: ${error.message}`)
-    }
-    
-    // Calculate statistics
-    const totalDays = new Set(data?.map(record => record.attendance_date)).size
-    const totalRecords = data?.length || 0
-    
-    const presentCount = data?.filter(record => record.status === 'present').length || 0
-    const absentCount = data?.filter(record => record.status === 'absent').length || 0
-    const excusedCount = data?.filter(record => record.status === 'excused').length || 0
-    
-    // Get unique student count
-    const uniqueStudents = new Set(data?.map(record => record.student_id)).size
-    
+    const db = getDb()
+
+    const data = await db
+      .select()
+      .from(attendance)
+      .where(
+        and(
+          gte(attendance.attendanceDate, startDate),
+          lte(attendance.attendanceDate, endDate)
+        )
+      )
+
+    const totalDays = new Set(data.map(record => record.attendanceDate)).size
+    const totalRecords = data.length
+    const presentCount = data.filter(record => record.status === 'present').length
+    const absentCount = data.filter(record => record.status === 'absent').length
+    const excusedCount = data.filter(record => record.status === 'excused').length
+    const uniqueStudents = new Set(data.map(record => record.studentId)).size
+
     return {
       totalDays,
       totalRecords,
@@ -382,95 +354,78 @@ export const attendanceService = {
    * Get attendance records for a specific day with student details.
    */
   async getDailyAttendance(date: string): Promise<any[]> {
-    const supabase = getSupabaseClient()
-    
-    // Get all students
-    const { data: students, error: studentsError } = await supabase
-      .from<Student>('students')
-      .select('*')
-      .eq('status', 'current') // Only get active students
-    
-    if (studentsError) {
-      throw new Error(`Failed to fetch students: ${studentsError.message}`)
-    }
-    
-    // Get attendance records for the specified date
-    const { data: attendanceRecords, error: attendanceError } = await supabase
-      .from<Attendance>('attendance')
-      .select('*')
-      .eq('attendance_date', date)
-    
-    if (attendanceError) {
-      throw new Error(`Failed to fetch attendance records: ${attendanceError.message}`)
-    }
-    
-    // Create a map for quick lookup of attendance records
-    const attendanceMap = new Map()
-    attendanceRecords?.forEach(record => {
-      if (record.student_id) {
-        attendanceMap.set(record.student_id, record)
-      }
-    })
-    
-    // Combine student data with attendance data
-    return students?.map(student => {
-      const attendance = attendanceMap.get(student.id)
+    const db = getDb()
+
+    // Get all active students
+    const activeStudents = await db
+      .select()
+      .from(students)
+      .where(eq(students.status, 'current'))
+
+    // Get attendance records for the date
+    const attendanceRecords = await db
+      .select()
+      .from(attendance)
+      .where(eq(attendance.attendanceDate, date))
+
+    const attendanceMap = new Map(
+      attendanceRecords.map(record => [record.studentId, record])
+    )
+
+    return activeStudents.map(student => {
+      const record = attendanceMap.get(student.id)
       return {
         student_id: student.id,
-        first_name: student.first_name,
-        last_name: student.last_name,
+        first_name: student.firstName,
+        last_name: student.lastName,
         email: student.email,
-        attendance_id: attendance?.id || null,
-        status: attendance?.status || 'unmarked',
-        clock_in: attendance?.clock_in || null,
-        clock_out: attendance?.clock_out || null
+        attendance_id: record?.id || null,
+        status: record?.status || 'unmarked',
+        clock_in: record?.clockIn || null,
+        clock_out: record?.clockOut || null
       }
-    }) || []
+    })
   },
 
   /**
    * Get attendance summary for a student.
    */
   async getStudentAttendanceSummary(studentId: string, startDate: string, endDate: string): Promise<any> {
-    const supabase = getSupabaseClient()
-    
-    // Get attendance records for this student in the date range
-    const { data, error } = await supabase
-      .from<Attendance>('attendance')
-      .select('*')
-      .eq('student_id', studentId)
-      .gte('attendance_date', startDate)
-      .lte('attendance_date', endDate)
-    
-    if (error) {
-      throw new Error(`Failed to fetch student attendance summary: ${error.message}`)
-    }
-    
-    // Calculate attendance statistics
-    const totalDays = new Set(data?.map(record => record.attendance_date)).size
-    const presentCount = data?.filter(record => record.status === 'present').length || 0
-    const absentCount = data?.filter(record => record.status === 'absent').length || 0
-    const excusedCount = data?.filter(record => record.status === 'excused').length || 0
-    
-    // Calculate average hours if clock in/out data is available
+    const db = getDb()
+
+    const data = await db
+      .select()
+      .from(attendance)
+      .where(
+        and(
+          eq(attendance.studentId, studentId),
+          gte(attendance.attendanceDate, startDate),
+          lte(attendance.attendanceDate, endDate)
+        )
+      )
+
+    const totalDays = new Set(data.map(record => record.attendanceDate)).size
+    const presentCount = data.filter(record => record.status === 'present').length
+    const absentCount = data.filter(record => record.status === 'absent').length
+    const excusedCount = data.filter(record => record.status === 'excused').length
+
     let totalHours = 0
     let daysWithHours = 0
-    
-    data?.forEach(record => {
-      if (record.clock_in && record.clock_out) {
-        const clockIn = new Date(record.clock_in)
-        const clockOut = new Date(record.clock_out)
+
+    data.forEach(record => {
+      if (record.clockIn && record.clockOut) {
+        const clockIn = new Date(record.clockIn)
+        const clockOut = new Date(record.clockOut)
         const hoursPresent = (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60)
-        
         if (hoursPresent > 0) {
           totalHours += hoursPresent
           daysWithHours++
         }
       }
     })
-    
+
     const averageHours = daysWithHours > 0 ? totalHours / daysWithHours : 0
-    
+
     return {
       totalDays,
       presentCount,

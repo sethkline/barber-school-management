@@ -1,43 +1,37 @@
-import { createClient } from '@supabase/supabase-js'
+// Auth middleware - validates Cognito JWT tokens
+import { cognitoService, type CognitoUser } from '~/server/utils/cognitoClient'
+
+// Extend H3EventContext to include user
+declare module 'h3' {
+  interface H3EventContext {
+    user?: CognitoUser
+  }
+}
 
 export default defineEventHandler(async (event) => {
   // Skip auth for public routes
   const path = event.path || ''
-  if (path.startsWith('/api/public/')) {
+  if (path.startsWith('/api/public/') || path === '/api/health') {
     return
   }
 
   const accessToken = getCookie(event, 'access_token')
-  
+
   if (accessToken) {
     try {
-      // Get Supabase URL and key from environment variables
-      const supabaseUrl = process.env.SUPABASE_URL
-      const supabaseKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY
-      
-      if (!supabaseUrl || !supabaseKey) {
-        console.error('Missing Supabase environment variables')
-        return
-      }
-      
-      // Create a Supabase client with the admin key
-      const supabase = createClient(supabaseUrl, supabaseKey)
-      
-      // Get user information from the token
-      const { data, error } = await supabase.auth.getUser(accessToken)
-      
-      if (error) {
-        console.error('Error getting user from token:', error.message)
-        return
-      }
-      
-      if (data.user) {
-        // Set the user in the event context
-        event.context.user = data.user
-        console.log('User set in context:', data.user.id)
-      }
-    } catch (err) {
-      console.error('Auth middleware error:', err)
+      // Verify the JWT token
+      const payload = await cognitoService.verifyToken(accessToken)
+
+      // Get full user details
+      const user = await cognitoService.getUser(accessToken)
+
+      // Set the user in the event context
+      event.context.user = user
+      console.log('User set in context:', user.id)
+    } catch (err: any) {
+      console.error('Auth middleware error:', err.message)
+      // Token is invalid or expired - don't throw, just don't set user
+      // The individual endpoints can decide if authentication is required
     }
   }
 })

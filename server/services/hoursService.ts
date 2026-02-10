@@ -1,15 +1,13 @@
-import { getSupabaseClient } from '~/server/utils/supabaseClient'
-import type {
-  Tables,
-  TablesInsert,
-  TablesUpdate
-} from '~/types/supabase'
-
-// Define type aliases for convenience
-type StudentHours = Tables<'student_hours'>
-type StudentHoursInsert = TablesInsert<'student_hours'>
-type StudentHoursUpdate = TablesUpdate<'student_hours'>
-type Student = Tables<'students'>
+// server/services/hoursService.ts
+import { eq, and, gte, lte, sql, desc } from 'drizzle-orm'
+import { getDb } from '~/server/utils/db'
+import {
+  studentHours,
+  students,
+  type StudentHour,
+  type NewStudentHour,
+  type Student
+} from '~/server/db/schema'
 
 export interface ListHoursParams {
   page?: number
@@ -37,163 +35,163 @@ export const hoursService = {
     studentId = '',
     startDate = '',
     endDate = ''
-  }: ListHoursParams): Promise<{ data: StudentHours[]; count: number }> {
-    const supabase = getSupabaseClient()
-
-    // Begin building the query for the "student_hours" table.
-    let query = supabase
-      .from<StudentHours>('student_hours')
-      .select('*, students(first_name, last_name)', { count: 'exact' })
-
-    // Apply a filter by student ID if provided.
-    if (studentId) {
-      query = query.eq('student_id', studentId)
-    }
-
-    // Apply date range filters if provided
-    if (startDate) {
-      query = query.gte('date_recorded', startDate)
-    }
-    
-    if (endDate) {
-      query = query.lte('date_recorded', endDate)
-    }
-
-    // Calculate pagination offsets.
+  }: ListHoursParams): Promise<{ data: any[]; count: number }> {
+    const db = getDb()
     const offset = (page - 1) * limit
-    query = query.range(offset, offset + limit - 1)
-    
-    // Order by date (newest first)
-    query = query.order('date_recorded', { ascending: false })
 
-    // Execute the query.
-    const { data, error, count } = await query
-
-    if (error) {
-      throw new Error(`Failed to fetch hours records: ${error.message}`)
+    const conditions = []
+    if (studentId) {
+      conditions.push(eq(studentHours.studentId, studentId))
+    }
+    if (startDate) {
+      conditions.push(gte(studentHours.dateRecorded, startDate))
+    }
+    if (endDate) {
+      conditions.push(lte(studentHours.dateRecorded, endDate))
     }
 
-    return { data: data ?? [], count: count ?? 0 }
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined
+
+    const data = await db
+      .select({
+        id: studentHours.id,
+        studentId: studentHours.studentId,
+        hoursCompleted: studentHours.hoursCompleted,
+        dateRecorded: studentHours.dateRecorded,
+        createdAt: studentHours.createdAt,
+        firstName: students.firstName,
+        lastName: students.lastName
+      })
+      .from(studentHours)
+      .leftJoin(students, eq(studentHours.studentId, students.id))
+      .where(whereClause)
+      .orderBy(desc(studentHours.dateRecorded))
+      .limit(limit)
+      .offset(offset)
+
+    const countResult = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(studentHours)
+      .where(whereClause)
+
+    const count = Number(countResult[0]?.count ?? 0)
+
+    const transformedData = data.map(row => ({
+      id: row.id,
+      student_id: row.studentId,
+      hours_completed: row.hoursCompleted,
+      date_recorded: row.dateRecorded,
+      created_at: row.createdAt,
+      students: row.firstName ? {
+        first_name: row.firstName,
+        last_name: row.lastName
+      } : null
+    }))
+
+    return { data: transformedData, count }
   },
 
   /**
    * Retrieve a single hours record by ID.
    */
-  async getHoursRecordById(id: string): Promise<StudentHours> {
-    const supabase = getSupabaseClient()
-    const { data, error } = await supabase
-      .from<StudentHours>('student_hours')
-      .select('*')
-      .eq('id', id)
-      .single()
+  async getHoursRecordById(id: string): Promise<StudentHour> {
+    const db = getDb()
+    const result = await db
+      .select()
+      .from(studentHours)
+      .where(eq(studentHours.id, id))
+      .limit(1)
 
-    if (error) {
-      throw new Error(`Failed to get hours record with ID ${id}: ${error.message}`)
+    if (!result[0]) {
+      throw new Error(`Hours record with ID ${id} not found`)
     }
-    return data!
+    return result[0]
   },
 
   /**
    * Create a new hours record.
    */
-  async createHoursRecord(hoursData: StudentHoursInsert): Promise<StudentHours> {
-    const supabase = getSupabaseClient()
-    const { data, error } = await supabase
-      .from<StudentHours>('student_hours')
-      .insert(hoursData)
-      .single()
+  async createHoursRecord(hoursData: NewStudentHour): Promise<StudentHour> {
+    const db = getDb()
+    const result = await db
+      .insert(studentHours)
+      .values(hoursData)
+      .returning()
 
-    if (error) {
-      throw new Error(`Failed to create hours record: ${error.message}`)
+    if (!result[0]) {
+      throw new Error('Failed to create hours record')
     }
-    return data!
+    return result[0]
   },
 
   /**
    * Update an existing hours record.
    */
-  async updateHoursRecord(id: string, hoursData: StudentHoursUpdate): Promise<StudentHours> {
-    const supabase = getSupabaseClient()
-    const { data, error } = await supabase
-      .from<StudentHours>('student_hours')
-      .update(hoursData)
-      .eq('id', id)
-      .single()
+  async updateHoursRecord(id: string, hoursData: Partial<NewStudentHour>): Promise<StudentHour> {
+    const db = getDb()
+    const result = await db
+      .update(studentHours)
+      .set({ ...hoursData, updatedAt: new Date() })
+      .where(eq(studentHours.id, id))
+      .returning()
 
-    if (error) {
-      throw new Error(`Failed to update hours record with ID ${id}: ${error.message}`)
+    if (!result[0]) {
+      throw new Error(`Failed to update hours record with ID ${id}`)
     }
-    return data!
+    return result[0]
   },
 
   /**
    * Delete an hours record.
    */
-  async deleteHoursRecord(id: string): Promise<StudentHours> {
-    const supabase = getSupabaseClient()
-    const { data, error } = await supabase
-      .from<StudentHours>('student_hours')
-      .delete()
-      .eq('id', id)
-      .single()
+  async deleteHoursRecord(id: string): Promise<StudentHour> {
+    const db = getDb()
+    const result = await db
+      .delete(studentHours)
+      .where(eq(studentHours.id, id))
+      .returning()
 
-    if (error) {
-      throw new Error(`Failed to delete hours record with ID ${id}: ${error.message}`)
+    if (!result[0]) {
+      throw new Error(`Failed to delete hours record with ID ${id}`)
     }
-    return data!
+    return result[0]
   },
 
   /**
    * Get a student's total completed hours.
    */
   async getStudentTotalHours(studentId: string): Promise<number> {
-    const supabase = getSupabaseClient()
-    
-    const { data, error } = await supabase
-      .from<StudentHours>('student_hours')
-      .select('hours_completed')
-      .eq('student_id', studentId)
-    
-    if (error) {
-      throw new Error(`Failed to get total hours for student ${studentId}: ${error.message}`)
-    }
-    
-    // Calculate total hours
-    const totalHours = data?.reduce((sum, record) => sum + (record.hours_completed || 0), 0) || 0
-    
+    const db = getDb()
+
+    const data = await db
+      .select({ hoursCompleted: studentHours.hoursCompleted })
+      .from(studentHours)
+      .where(eq(studentHours.studentId, studentId))
+
+    const totalHours = data.reduce((sum, record) => sum + Number(record.hoursCompleted || 0), 0)
     return totalHours
   },
 
   /**
    * Get a summary of a student's hours progress toward requirements.
-   * The default requirement is 1000 hours, but this can be customized per program or student.
    */
   async getStudentHoursSummary(studentId: string, requirementHours: number = 1000): Promise<HoursSummary> {
-    const supabase = getSupabaseClient()
-    
-    // Get all hours records for the student
-    const { data, error } = await supabase
-      .from<StudentHours>('student_hours')
-      .select('hours_completed, date_recorded')
-      .eq('student_id', studentId)
-      .order('date_recorded', { ascending: false })
-    
-    if (error) {
-      throw new Error(`Failed to fetch hours summary for student ${studentId}: ${error.message}`)
-    }
-    
-    // Calculate total hours
-    const totalHours = data?.reduce((sum, record) => sum + (record.hours_completed || 0), 0) || 0
-    
-    // Get last recorded date
-    const lastRecorded = data && data.length > 0 ? data[0].date_recorded : null
-    
-    // Calculate progress percentage
+    const db = getDb()
+
+    const data = await db
+      .select({
+        hoursCompleted: studentHours.hoursCompleted,
+        dateRecorded: studentHours.dateRecorded
+      })
+      .from(studentHours)
+      .where(eq(studentHours.studentId, studentId))
+      .orderBy(desc(studentHours.dateRecorded))
+
+    const totalHours = data.reduce((sum, record) => sum + Number(record.hoursCompleted || 0), 0)
+    const lastRecorded = data.length > 0 ? data[0].dateRecorded : null
     const progressPercentage = Math.min(Math.round((totalHours / requirementHours) * 100), 100)
-    
-    // Determine if requirement has been met
     const requirementMet = totalHours >= requirementHours
-    
+
     return {
       totalHours,
       lastRecorded,
@@ -207,84 +205,61 @@ export const hoursService = {
    * Get monthly hours breakdown for a student within a date range.
    */
   async getStudentMonthlyHours(
-    studentId: string, 
+    studentId: string,
     startDate?: string,
     endDate?: string
   ): Promise<Array<{ month: string; total: number }>> {
-    const supabase = getSupabaseClient()
-    
-    // Build query with optional date range filters
-    let query = supabase
-      .from<StudentHours>('student_hours')
-      .select('date_recorded, hours_completed')
-      .eq('student_id', studentId)
-    
+    const db = getDb()
+
+    const conditions = [eq(studentHours.studentId, studentId)]
     if (startDate) {
-      query = query.gte('date_recorded', startDate)
+      conditions.push(gte(studentHours.dateRecorded, startDate))
     }
-    
     if (endDate) {
-      query = query.lte('date_recorded', endDate)
+      conditions.push(lte(studentHours.dateRecorded, endDate))
     }
-    
-    const { data, error } = await query
-    
-    if (error) {
-      throw new Error(`Failed to fetch monthly hours for student ${studentId}: ${error.message}`)
-    }
-    
-    // Group by month and calculate totals
+
+    const data = await db
+      .select({
+        dateRecorded: studentHours.dateRecorded,
+        hoursCompleted: studentHours.hoursCompleted
+      })
+      .from(studentHours)
+      .where(and(...conditions))
+
     const monthlyData: Record<string, number> = {}
-    
-    data?.forEach(record => {
-      if (record.date_recorded && record.hours_completed) {
-        // Extract YYYY-MM from the date
-        const monthKey = record.date_recorded.substring(0, 7)
-        
+
+    data.forEach(record => {
+      if (record.dateRecorded && record.hoursCompleted) {
+        const monthKey = record.dateRecorded.substring(0, 7)
         if (!monthlyData[monthKey]) {
           monthlyData[monthKey] = 0
         }
-        
-        monthlyData[monthKey] += record.hours_completed
+        monthlyData[monthKey] += Number(record.hoursCompleted)
       }
     })
-    
-    // Convert to array format for frontend charts
+
     const result = Object.entries(monthlyData).map(([month, total]) => ({
       month,
       total
     }))
-    
-    // Sort by month (chronologically)
+
     result.sort((a, b) => a.month.localeCompare(b.month))
-    
+
     return result
   },
 
   /**
    * Generate a PDF certificate of hours completion.
-   * This is a stub function that would typically integrate with a PDF generation service.
    */
   async generateCompletionCertificate(studentId: string): Promise<{ certificateUrl: string }> {
-    // First, verify the student has met the requirements
     const summary = await this.getStudentHoursSummary(studentId)
-    
+
     if (!summary.requirementMet) {
       throw new Error('Hours requirement not met. Unable to generate completion certificate.')
     }
-    
-    // This is where you would integrate with a PDF generation service
-    // For now, we'll just return a mock URL
-    
-    // In a real implementation, you would:
-    // 1. Get student details
-    // 2. Generate a PDF with appropriate styling and content
-    // 3. Store the PDF in a storage service (S3, Supabase Storage, etc.)
-    // 4. Return the URL to the stored PDF
-    
-    // Mock implementation
+
     const certificateUrl = `/api/certificates/${studentId}/hours-completion.pdf`
-    
     return { certificateUrl }
   },
 
@@ -292,18 +267,22 @@ export const hoursService = {
    * Get students who have completed their hours requirements.
    */
   async getStudentsWithCompletedHours(requirementHours: number = 1000): Promise<Array<Student & { total_hours: number }>> {
-    const supabase = getSupabaseClient()
-    
-    // This is an approach using a raw SQL query with a JOIN and GROUP BY
-    // In production, you might want to create a database view for this
-    const { data, error } = await supabase.rpc('get_students_with_completed_hours', {
-      requirement: requirementHours
-    })
-    
-    if (error) {
-      throw new Error(`Failed to fetch students with completed hours: ${error.message}`)
-    }
-    
-    return data || []
+    const db = getDb()
+
+    // Get all students with their total hours
+    const result = await db
+      .select({
+        student: students,
+        totalHours: sql<number>`COALESCE(SUM(${studentHours.hoursCompleted}), 0)`
+      })
+      .from(students)
+      .leftJoin(studentHours, eq(students.id, studentHours.studentId))
+      .groupBy(students.id)
+      .having(sql`COALESCE(SUM(${studentHours.hoursCompleted}), 0) >= ${requirementHours}`)
+
+    return result.map(row => ({
+      ...row.student,
+      total_hours: Number(row.totalHours)
+    }))
   }
 }

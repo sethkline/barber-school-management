@@ -1,25 +1,25 @@
 // server/api/students/recent.ts
-import { getSupabaseClient } from '~/server/utils/supabaseClient'
+import { desc } from 'drizzle-orm'
+import { getDb } from '~/server/utils/db'
+import { students } from '~/server/db/schema'
 
 export default defineEventHandler(async (event) => {
   try {
     const query = getQuery(event)
     const limit = parseInt(query.limit as string) || 5
-    
-    const supabase = getSupabaseClient()
-    
-    const { data, error } = await supabase
-      .from('students')
-      .select('*')
-      .order('created_at', { ascending: false })
+
+    const db = getDb()
+
+    const data = await db
+      .select()
+      .from(students)
+      .orderBy(desc(students.createdAt))
       .limit(limit)
-    
-    if (error) throw new Error(`Failed to fetch recent students: ${error.message}`)
-    
+
     return {
       data: data || []
     }
-    
+
   } catch (error: any) {
     console.error('Error fetching recent students:', error)
     throw createError({

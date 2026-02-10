@@ -1,20 +1,20 @@
-import { getSupabaseClient } from '../utils/supabaseClient'
+import { eq, desc } from 'drizzle-orm'
+import { getDb } from '~/server/utils/db'
+import { studentDocuments } from '~/server/db/schema'
 import { uploadFileToS3, deleteFileFromS3, getPresignedUrl } from '../utils/s3Client'
 
 export interface Document {
   id: string
   student_id: string
   document_name: string
-  document_type: string
-  s3_key: string
-  file_size: number
+  file_url: string
+  expiration_date: string | null
   uploaded_at: string
-  uploaded_by: string
 }
 
 export const documentService = {
   async uploadDocument(studentId: string, file: Buffer, fileName: string, fileType: string, fileSize: number, uploadedBy: string) {
-    const supabase = getSupabaseClient()
+    const db = getDb()
 
     // Generate unique S3 key
     const timestamp = Date.now()
@@ -23,76 +23,68 @@ export const documentService = {
     // Upload to S3
     await uploadFileToS3(file, s3Key, fileType)
 
-    // Store metadata in Supabase
-    const { data, error } = await supabase
-      .from('documents')
-      .insert({
-        student_id: studentId,
-        document_name: fileName,
-        document_type: fileType,
-        s3_key: s3Key,
-        file_size: fileSize,
-        uploaded_by: uploadedBy,
+    // Store metadata in database
+    const [record] = await db
+      .insert(studentDocuments)
+      .values({
+        studentId: studentId,
+        documentName: fileName,
+        fileUrl: s3Key,
       })
-      .select()
-      .single()
+      .returning()
 
-    if (error) {
+    if (!record) {
       // Cleanup S3 if database insert fails
       await deleteFileFromS3(s3Key)
-      throw error
+      throw new Error('Failed to save document metadata')
     }
 
-    return data
+    return record
   },
 
   async getDocumentsByStudentId(studentId: string) {
-    const supabase = getSupabaseClient()
+    const db = getDb()
 
-    const { data, error } = await supabase
-      .from('documents')
-      .select('*')
-      .eq('student_id', studentId)
-      .order('uploaded_at', { ascending: false })
+    const data = await db
+      .select()
+      .from(studentDocuments)
+      .where(eq(studentDocuments.studentId, studentId))
+      .orderBy(desc(studentDocuments.uploadedAt))
 
-    if (error) throw error
     return data
   },
 
   async getDocumentById(documentId: string) {
-    const supabase = getSupabaseClient()
+    const db = getDb()
 
-    const { data, error } = await supabase
-      .from('documents')
-      .select('*')
-      .eq('id', documentId)
-      .single()
+    const records = await db
+      .select()
+      .from(studentDocuments)
+      .where(eq(studentDocuments.id, documentId))
+      .limit(1)
 
-    if (error) throw error
-    return data
+    if (records.length === 0) throw new Error('Document not found')
+    return records[0]
   },
 
   async getDocumentDownloadUrl(documentId: string) {
     const document = await this.getDocumentById(documentId)
-    return await getPresignedUrl(document.s3_key)
+    return await getPresignedUrl(document.fileUrl!)
   },
 
   async deleteDocument(documentId: string) {
-    const supabase = getSupabaseClient()
+    const db = getDb()
 
     // Get document info
     const document = await this.getDocumentById(documentId)
 
     // Delete from S3
-    await deleteFileFromS3(document.s3_key)
+    await deleteFileFromS3(document.fileUrl!)
 
     // Delete from database
-    const { error } = await supabase
-      .from('documents')
-      .delete()
-      .eq('id', documentId)
-
-    if (error) throw error
+    await db
+      .delete(studentDocuments)
+      .where(eq(studentDocuments.id, documentId))
 
     return { success: true }
   },

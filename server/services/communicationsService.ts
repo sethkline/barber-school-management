@@ -1,37 +1,35 @@
-import { getSupabaseClient } from '~/server/utils/supabaseClient';
-import type { Tables, TablesInsert } from '~/types/supabase';
-import mailgun from 'mailgun-js';
+// server/services/communicationsService.ts
+import { eq, ilike, or, sql, and, gte, lte, desc, isNotNull, asc } from 'drizzle-orm'
+import { getDb } from '~/server/utils/db'
+import {
+  communications,
+  communicationTemplates,
+  type Communication,
+  type NewCommunication,
+  type CommunicationTemplate,
+  type NewCommunicationTemplate,
+  type Student,
+  type Lead
+} from '~/server/db/schema'
+import { sesService } from '~/server/utils/sesClient'
 
-// Define type aliases for convenience
-type CommunicationTemplate = Tables<'communication_templates'>;
-type CommunicationTemplateInsert = TablesInsert<'communication_templates'>;
-type CommunicationTemplateUpdate = TablesInsert<'communication_templates'>;
-
-type Communication = Tables<'communications'>;
-type CommunicationInsert = TablesInsert<'communications'>;
-
-type Student = Tables<'students'>;
-type Lead = Tables<'leads'>;
-
-// Interface for email options
 interface EmailOptions {
-  to: string;
-  subject: string;
-  body: string;
-  templateId?: string;
-  recipientType?: 'student' | 'lead';
-  recipientId?: string;
+  to: string
+  subject: string
+  body: string
+  templateId?: string
+  recipientType?: 'student' | 'lead'
+  recipientId?: string
 }
 
-// Interface for bulk email options
 interface BulkEmailOptions {
   recipients: Array<{
-    to: string;
-    recipientType?: 'student' | 'lead';
-    recipientId?: string;
-    variables?: Record<string, string>;
-  }>;
-  templateId: string;
+    to: string
+    recipientType?: 'student' | 'lead'
+    recipientId?: string
+    variables?: Record<string, string>
+  }>
+  templateId: string
 }
 
 export const communicationService = {
@@ -39,82 +37,69 @@ export const communicationService = {
    * Get all communication templates
    */
   async getTemplates(): Promise<CommunicationTemplate[]> {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase
-      .from<CommunicationTemplate>('communication_templates')
-      .select('*')
-      .order('name');
-
-    if (error) {
-      throw new Error(`Failed to fetch communication templates: ${error.message}`);
-    }
-
-    return data ?? [];
+    const db = getDb()
+    return db
+      .select()
+      .from(communicationTemplates)
+      .orderBy(asc(communicationTemplates.name))
   },
 
   /**
    * Get a single template by ID
    */
   async getTemplateById(id: string): Promise<CommunicationTemplate> {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase
-      .from<CommunicationTemplate>('communication_templates')
-      .select('*')
-      .eq('id', id)
-      .single();
+    const db = getDb()
+    const result = await db
+      .select()
+      .from(communicationTemplates)
+      .where(eq(communicationTemplates.id, id))
+      .limit(1)
 
-    if (error) {
-      throw new Error(`Failed to fetch template with ID ${id}: ${error.message}`);
+    if (!result[0]) {
+      throw new Error(`Template with ID ${id} not found`)
     }
-
-    return data;
+    return result[0]
   },
 
   /**
    * Create a new communication template
    */
-  async createTemplate(template: CommunicationTemplateInsert): Promise<CommunicationTemplate> {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase
-      .from<CommunicationTemplate>('communication_templates')
-      .insert(template)
-      .single();
+  async createTemplate(template: NewCommunicationTemplate): Promise<CommunicationTemplate> {
+    const db = getDb()
+    const result = await db
+      .insert(communicationTemplates)
+      .values(template)
+      .returning()
 
-    if (error) {
-      throw new Error(`Failed to create template: ${error.message}`);
+    if (!result[0]) {
+      throw new Error('Failed to create template')
     }
-
-    return data;
+    return result[0]
   },
 
   /**
    * Update an existing communication template
    */
-  async updateTemplate(id: string, template: CommunicationTemplateUpdate): Promise<CommunicationTemplate> {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase
-      .from<CommunicationTemplate>('communication_templates')
-      .update(template)
-      .eq('id', id)
-      .single();
+  async updateTemplate(id: string, template: Partial<NewCommunicationTemplate>): Promise<CommunicationTemplate> {
+    const db = getDb()
+    const result = await db
+      .update(communicationTemplates)
+      .set({ ...template, updatedAt: new Date() })
+      .where(eq(communicationTemplates.id, id))
+      .returning()
 
-    if (error) {
-      throw new Error(`Failed to update template with ID ${id}: ${error.message}`);
+    if (!result[0]) {
+      throw new Error(`Failed to update template with ID ${id}`)
     }
-
-    return data;
+    return result[0]
   },
 
   /**
    * Delete a communication template
    */
   async deleteTemplate(id: string): Promise<void> {
-    const supabase = getSupabaseClient();
-    const { error } = await supabase.from<CommunicationTemplate>('communication_templates').delete().eq('id', id);
-
-    if (error) {
-      throw new Error(`Failed to delete template with ID ${id}: ${error.message}`);
-    }
+    const db = getDb()
+    await db.delete(communicationTemplates).where(eq(communicationTemplates.id, id))
   },
 
   /**
@@ -123,161 +108,163 @@ export const communicationService = {
   async getCommunicationHistory(
     options: { studentId?: string; leadId?: string; limit?: number; page?: number } = {}
   ): Promise<{ data: Communication[]; count: number }> {
-    const { studentId, leadId, limit = 10, page = 1 } = options;
-    const supabase = getSupabaseClient();
+    const { studentId, leadId, limit = 10, page = 1 } = options
+    const db = getDb()
+    const offset = (page - 1) * limit
 
-    let query = supabase
-      .from<Communication>('communications')
-      .select('*', { count: 'exact' })
-      .order('sent_at', { ascending: false });
-
+    const conditions = []
     if (studentId) {
-      query = query.eq('student_id', studentId);
+      conditions.push(eq(communications.studentId, studentId))
     }
-
     if (leadId) {
-      query = query.eq('lead_id', leadId);
+      conditions.push(eq(communications.leadId, leadId))
     }
 
-    // Calculate pagination
-    const offset = (page - 1) * limit;
-    query = query.range(offset, offset + limit - 1);
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined
 
-    const { data, error, count } = await query;
+    const data = await db
+      .select()
+      .from(communications)
+      .where(whereClause)
+      .orderBy(desc(communications.sentAt))
+      .limit(limit)
+      .offset(offset)
 
-    if (error) {
-      throw new Error(`Failed to fetch communication history: ${error.message}`);
-    }
+    const countResult = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(communications)
+      .where(whereClause)
 
-    return { data: data ?? [], count: count ?? 0 };
+    const count = Number(countResult[0]?.count ?? 0)
+
+    return { data, count }
   },
-
-  // Add this method to your communicationService.ts file
 
   /**
    * Get all communications with optional filtering
    */
   async getAllCommunications(
     options: {
-      limit?: number;
-      page?: number;
-      search?: string;
-      type?: string;
-      fromDate?: string;
-      toDate?: string;
-      recipientType?: string;
+      limit?: number
+      page?: number
+      search?: string
+      type?: string
+      fromDate?: string
+      toDate?: string
+      recipientType?: string
     } = {}
   ): Promise<{ data: Communication[]; count: number }> {
-    const { limit = 10, page = 1, search, type, fromDate, toDate, recipientType } = options;
+    const { limit = 10, page = 1, search, type, fromDate, toDate, recipientType } = options
+    const db = getDb()
+    const offset = (page - 1) * limit
 
-    const supabase = getSupabaseClient();
-
-    let query = supabase
-      .from<Communication>('communications')
-      .select('*', { count: 'exact' })
-      .order('sent_at', { ascending: false });
-
-    // Apply filters if provided
+    const conditions = []
     if (search) {
-      query = query.or(`subject.ilike.%${search}%,body.ilike.%${search}%`);
+      conditions.push(
+        or(
+          ilike(communications.subject, `%${search}%`),
+          ilike(communications.body, `%${search}%`)
+        )
+      )
     }
-
     if (type) {
-      query = query.eq('type', type);
+      conditions.push(eq(communications.type, type))
     }
-
-    if (fromDate && toDate) {
-      query = query.gte('sent_at', fromDate).lte('sent_at', toDate);
-    } else if (fromDate) {
-      query = query.gte('sent_at', fromDate);
-    } else if (toDate) {
-      query = query.lte('sent_at', toDate);
+    if (fromDate) {
+      conditions.push(gte(communications.sentAt, new Date(fromDate)))
     }
-
+    if (toDate) {
+      conditions.push(lte(communications.sentAt, new Date(toDate)))
+    }
     if (recipientType === 'student') {
-      query = query.not('student_id', 'is', null);
+      conditions.push(isNotNull(communications.studentId))
     } else if (recipientType === 'lead') {
-      query = query.not('lead_id', 'is', null);
+      conditions.push(isNotNull(communications.leadId))
     }
 
-    // Calculate pagination
-    const offset = (page - 1) * limit;
-    query = query.range(offset, offset + limit - 1);
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined
 
-    const { data, error, count } = await query;
+    const data = await db
+      .select()
+      .from(communications)
+      .where(whereClause)
+      .orderBy(desc(communications.sentAt))
+      .limit(limit)
+      .offset(offset)
 
-    if (error) {
-      throw new Error(`Failed to fetch communication history: ${error.message}`);
-    }
+    const countResult = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(communications)
+      .where(whereClause)
 
-    return { data: data ?? [], count: count ?? 0 };
+    const count = Number(countResult[0]?.count ?? 0)
+
+    return { data, count }
   },
 
   /**
    * Process template variables for personalization
-   * Replaces variables like {{firstName}} with actual values
    */
   processTemplate(templateContent: string, variables: Record<string, string>): string {
     return templateContent.replace(/\{\{(\w+)\}\}/g, (match, variable) => {
-      return variables[variable] || match;
-    });
+      return variables[variable] || match
+    })
   },
 
   /**
    * Send an email and track it in communications table
    */
   async sendEmail(options: EmailOptions): Promise<Communication> {
-    const { to, subject, body, templateId, recipientType, recipientId } = options;
+    const { to, subject, body, templateId, recipientType, recipientId } = options
+    const db = getDb()
 
     try {
-      // For development/testing, we can just console.log the email
-      // In production, you would use Mailgun or another email service
       if (process.env.NODE_ENV === 'development') {
-        console.log('Sending email:');
-        console.log(`To: ${to}`);
-        console.log(`Subject: ${subject}`);
-        console.log(`Body: ${body}`);
+        console.log('Sending email:')
+        console.log(`To: ${to}`)
+        console.log(`Subject: ${subject}`)
+        console.log(`Body: ${body}`)
       } else {
-        // Uncomment and configure for production use with Mailgun
-        const mg = mailgun({
-          apiKey: process.env.MAILGUN_API_KEY || '',
-          domain: process.env.MAILGUN_DOMAIN || ''
-        });
-
-        await mg.messages().send({
-          from: process.env.EMAIL_FROM || 'noreply@yourdomain.com',
+        const config = useRuntimeConfig()
+        const result = await sesService.sendEmail({
+          from: config.sesFromEmail || 'noreply@yourdomain.com',
           to,
           subject,
           html: body
-        });
+        })
+
+        if (!result.success) {
+          throw new Error(result.error || 'SES send failed')
+        }
       }
 
-      // Record the communication in the database
-      const communicationRecord: CommunicationInsert = {
-        to_email: to,
+      const communicationRecord: NewCommunication = {
+        toEmail: to,
         subject,
         body,
-        template_id: templateId,
+        templateId,
         type: 'email',
-        sent_at: new Date().toISOString()
-      };
+        sentAt: new Date()
+      }
 
       if (recipientType === 'student' && recipientId) {
-        communicationRecord.student_id = recipientId;
+        communicationRecord.studentId = recipientId
       } else if (recipientType === 'lead' && recipientId) {
-        communicationRecord.lead_id = recipientId;
+        communicationRecord.leadId = recipientId
       }
 
-      const supabase = getSupabaseClient();
-      const { data, error } = await supabase.from<Communication>('communications').insert(communicationRecord).single();
+      const result = await db
+        .insert(communications)
+        .values(communicationRecord)
+        .returning()
 
-      if (error) {
-        throw new Error(`Failed to record communication: ${error.message}`);
+      if (!result[0]) {
+        throw new Error('Failed to record communication')
       }
 
-      return data;
+      return result[0]
     } catch (error: any) {
-      throw new Error(`Failed to send email: ${error.message}`);
+      throw new Error(`Failed to send email: ${error.message}`)
     }
   },
 
@@ -285,21 +272,17 @@ export const communicationService = {
    * Send bulk emails using a template
    */
   async sendBulkEmails(options: BulkEmailOptions): Promise<Communication[]> {
-    const { recipients, templateId } = options;
+    const { recipients, templateId } = options
 
     try {
-      // Get the template
-      const template = await this.getTemplateById(templateId);
+      const template = await this.getTemplateById(templateId)
 
-      // Send emails to each recipient
       const promises = recipients.map(async (recipient) => {
-        const variables = recipient.variables || {};
+        const variables = recipient.variables || {}
 
-        // Process the template with the recipient's variables
-        const processedSubject = this.processTemplate(template.subject, variables);
-        const processedBody = this.processTemplate(template.body, variables);
+        const processedSubject = this.processTemplate(template.subject, variables)
+        const processedBody = this.processTemplate(template.body, variables)
 
-        // Send the email
         return this.sendEmail({
           to: recipient.to,
           subject: processedSubject,
@@ -307,12 +290,12 @@ export const communicationService = {
           templateId,
           recipientType: recipient.recipientType,
           recipientId: recipient.recipientId
-        });
-      });
+        })
+      })
 
-      return Promise.all(promises);
+      return Promise.all(promises)
     } catch (error: any) {
-      throw new Error(`Failed to send bulk emails: ${error.message}`);
+      throw new Error(`Failed to send bulk emails: ${error.message}`)
     }
   },
 
@@ -321,15 +304,15 @@ export const communicationService = {
    */
   generateStudentVariables(student: Student): Record<string, string> {
     return {
-      firstName: student.first_name,
-      lastName: student.last_name,
+      firstName: student.firstName,
+      lastName: student.lastName,
       email: student.email,
       phone: student.phone || '',
-      enrollmentDate: student.enrollment_date || '',
-      expectedGraduationDate: student.expected_graduation_date || '',
+      enrollmentDate: student.enrollmentDate || '',
+      expectedGraduationDate: student.expectedGraduationDate || '',
       status: student.status || '',
-      fullName: `${student.first_name} ${student.last_name}`
-    };
+      fullName: `${student.firstName} ${student.lastName}`
+    }
   },
 
   /**
@@ -337,13 +320,13 @@ export const communicationService = {
    */
   generateLeadVariables(lead: Lead): Record<string, string> {
     return {
-      firstName: lead.first_name,
-      lastName: lead.last_name,
+      firstName: lead.firstName,
+      lastName: lead.lastName,
       email: lead.email,
       phone: lead.phone || '',
       message: lead.message || '',
       status: lead.status || '',
-      fullName: `${lead.first_name} ${lead.last_name}`
-    };
+      fullName: `${lead.firstName} ${lead.lastName}`
+    }
   }
-};
+}

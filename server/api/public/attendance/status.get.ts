@@ -1,4 +1,6 @@
-import { getSupabaseClient } from '~/server/utils/supabaseClient'
+import { eq, and, isNull } from 'drizzle-orm'
+import { getDb } from '~/server/utils/db'
+import { attendance } from '~/server/db/schema'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -12,19 +14,23 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    const supabase = getSupabaseClient()
+    const db = getDb()
 
     // Check if student has active clock-in
-    const { data } = await supabase
-      .from('attendance')
-      .select('id, clock_in')
-      .eq('student_id', studentId as string)
-      .is('clock_out', null)
-      .single()
+    const records = await db
+      .select({ id: attendance.id, clockIn: attendance.clockIn })
+      .from(attendance)
+      .where(and(
+        eq(attendance.studentId, studentId as string),
+        isNull(attendance.clockOut)
+      ))
+      .limit(1)
+
+    const data = records[0] || null
 
     return {
       isClockedIn: !!data,
-      clockInTime: data?.clock_in || null,
+      clockInTime: data?.clockIn || null,
     }
   } catch (error: any) {
     return {

@@ -4,43 +4,50 @@ export default defineNuxtConfig({
   modules: [
     '@nuxtjs/tailwindcss',
     '@primevue/nuxt-module',
-    '@nuxtjs/supabase',
     '@nuxtjs/storybook',
     '@nuxt/test-utils/module',
     '@pinia/nuxt',
     '@vee-validate/nuxt'
   ],
   primevue: {
-    options: { theme: 'none' },
-},
+    options: { theme: 'none' }
+  },
   css: ['@/assets/styles/tailwind.css', '@/assets/styles/base.css', 'primeicons/primeicons.css'],
   postcss: {
     plugins: {
-        'postcss-import': {},
-        tailwindcss: {},
-        autoprefixer: {},
+      'postcss-import': {},
+      tailwindcss: {},
+      autoprefixer: {}
     }
-},
-  supabase: {
-    url: process.env.SUPABASE_URL,
-    key: process.env.SUPABASE_SERVICE_KEY,
-    serviceKey: process.env.SUPABASE_SERVICE_KEY,
-    redirect: false
   },
   runtimeConfig: {
-    // Private: available only on the server-side
-    supabaseUrl: process.env.SUPABASE_URL,
-    supabaseServiceKey: process.env.SUPABASE_SERVICE_KEY,
+    // Database Configuration
+    databaseUrl: process.env.DATABASE_URL,
 
-    // AWS S3 Configuration
+    // AWS Cognito Configuration
+    cognitoUserPoolId: process.env.COGNITO_USER_POOL_ID,
+    cognitoClientId: process.env.COGNITO_CLIENT_ID,
+    cognitoClientSecret: process.env.COGNITO_CLIENT_SECRET,
+    cognitoIssuerUrl: process.env.COGNITO_ISSUER_URL,
+
+    // AWS General Configuration
+    awsRegion: process.env.AWS_REGION || 'us-east-1',
     awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID,
     awsSecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-    awsRegion: process.env.AWS_REGION,
+
+    // AWS S3 Configuration
     awsS3Bucket: process.env.AWS_S3_BUCKET,
+
+    // AWS SNS Configuration
+    snsTopicArn: process.env.SNS_TOPIC_ARN,
+
+    // AWS SES Configuration
+    sesFromEmail: process.env.SES_FROM_EMAIL,
 
     // Public: safely exposed to the client-side
     public: {
-      supabaseAnonKey: process.env.SUPABASE_ANON_KEY
+      appName: 'Barber School',
+      appUrl: process.env.APP_URL || 'http://localhost:3000'
     }
-  },
+  }
 })

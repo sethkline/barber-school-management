@@ -1,0 +1,81 @@
+# Docker Compose for local development
+version: '3.8'
+
+services:
+  # PostgreSQL database
+  postgres:
+    image: postgres:16-alpine
+    container_name: barber-school-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: barber_school
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./infra/database/indexes.sql:/docker-entrypoint-initdb.d/02-indexes.sql
+      - ./infra/database/seed.sql:/docker-entrypoint-initdb.d/03-seed.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # LocalStack for AWS services emulation (Cognito, SNS, S3)
+  localstack:
+    image: localstack/localstack:latest
+    container_name: barber-school-localstack
+    environment:
+      - SERVICES=cognito-idp,sns,s3
+      - DEBUG=1
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    ports:
+      - "4566:4566"  # LocalStack Gateway
+      - "4510-4559:4510-4559"  # External service ports
+    volumes:
+      - localstack_data:/var/lib/localstack
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Application (for production-like testing)
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: barber-school-app
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/barber_school
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_ENDPOINT_URL=http://localstack:4566
+      - COGNITO_USER_POOL_ID=us-east-1_test
+      - COGNITO_CLIENT_ID=test-client-id
+      - COGNITO_CLIENT_SECRET=test-client-secret
+      - COGNITO_ISSUER_URL=http://localstack:4566/us-east-1_test
+      - SNS_TOPIC_ARN=arn:aws:sns:us-east-1:000000000000:barber-school-sms
+      - AWS_S3_BUCKET=barber-school-documents
+    depends_on:
+      postgres:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+    profiles:
+      - production
+
+volumes:
+  postgres_data:
+  localstack_data:
+
+networks:
+  default:
+    name: barber-school-network

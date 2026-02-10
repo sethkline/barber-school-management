@@ -1,80 +1,101 @@
-// server/api/auth/me.ts
-import { getSupabaseClient } from '~/server/utils/supabaseClient'
-import { getCookie, createError } from 'h3'
+// Get current user endpoint
+import { cognitoService } from '~/server/utils/cognitoClient'
 
 export default defineEventHandler(async (event) => {
+  const accessToken = getCookie(event, 'access_token')
+
+  if (!accessToken) {
+    throw createError({
+      statusCode: 401,
+      message: 'Not authenticated'
+    })
+  }
+
   try {
-    // Get the access token from cookie
-    const accessToken = getCookie(event, 'access_token')
-    
-    if (!accessToken) {
-      throw createError({
-        statusCode: 401,
-        message: 'No access token found'
-      })
-    }
-    
-    // Create a Supabase client with the access token
-    const supabase = getSupabaseClient()
-    
-    // Set the auth token manually for the API call
-    const { data, error } = await supabase.auth.getUser(accessToken)
-    
-    if (error || !data.user) {
-      console.error('Error getting user:', error)
-      throw createError({
-        statusCode: 401,
-        message: 'Invalid or expired token'
-      })
-    }
-    
-    const user = data.user
-    
-    // Extract metadata
-    const userMetadata = user.user_metadata || {}
-    const appMetadata = user.app_metadata || {}
-    
-    // Get first name and last name from metadata if available
-    let firstName = userMetadata.first_name || null
-    let lastName = userMetadata.last_name || null
-    
-    // Extract additional fields from metadata
-    let phone = userMetadata.phone || null
-    let profileImageUrl = userMetadata.profile_image_url || null
-    
-    // Extract role from metadata, with appropriate fallbacks
-    let role = userMetadata.role || appMetadata.role || 'admin' // Default to admin for now
-    
-    // If no first/last name in metadata, try to find it in the students table
-    if (!firstName || !lastName) {
-      const { data: studentData } = await supabase
-        .from('students')
-        .select('first_name, last_name')
-        .eq('email', user.email)
-        .single()
-        
-      if (studentData) {
-        firstName = studentData.first_name
-        lastName = studentData.last_name
-        // Don't override the role if we already found it in metadata
-      }
-    }
-    
+    // Get user from Cognito
+    const user = await cognitoService.getUser(accessToken)
+
     return {
       id: user.id,
       email: user.email,
-      firstName,
-      lastName,
-      phone,
-      profileImageUrl,
-      role,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      phone: user.phone,
+      profileImageUrl: user.profileImageUrl,
+      role: user.role,
       isAuthenticated: true
     }
   } catch (error: any) {
-    console.error('Authentication error:', error)
+    console.error('Get user error:', error.message)
+
+    // Try to refresh token
+    const refreshToken = getCookie(event, 'refresh_token')
+    if (refreshToken) {
+      try {
+        // We need the email for refresh, try to get it from id_token
+        const idToken = getCookie(event, 'id_token')
+        let email = ''
+
+        if (idToken) {
+          try {
+            // Decode the ID token to get email (without verification for refresh)
+            const parts = idToken.split('.')
+            if (parts.length === 3) {
+              const payload = JSON.parse(atob(parts[1]))
+              email = payload.email
+            }
+          } catch {
+            // Ignore decode errors
+          }
+        }
+
+        if (email) {
+          const tokens = await cognitoService.refreshTokens(refreshToken, email)
+
+          // Update cookies
+          setCookie(event, 'access_token', tokens.accessToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            path: '/',
+            maxAge: tokens.expiresIn
+          })
+
+          setCookie(event, 'id_token', tokens.idToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            path: '/',
+            maxAge: tokens.expiresIn
+          })
+
+          // Get user with new token
+          const user = await cognitoService.getUser(tokens.accessToken)
+
+          return {
+            id: user.id,
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            phone: user.phone,
+            profileImageUrl: user.profileImageUrl,
+            role: user.role,
+            isAuthenticated: true
+          }
+        }
+      } catch (refreshError: any) {
+        console.error('Token refresh failed:', refreshError.message)
+      }
+    }
+
+    // Clear cookies if token is invalid
+    deleteCookie(event, 'access_token', { path: '/' })
+    deleteCookie(event, 'refresh_token', { path: '/' })
+    deleteCookie(event, 'id_token', { path: '/' })
+
     throw createError({
       statusCode: 401,
-      message: error.message || 'Unauthorized'
+      message: 'Session expired. Please login again.'
     })
   }
 })
